@@ -25,6 +25,34 @@ extern "C" {
  *      TYPEDEFS
  **********************/
 
+typedef struct {
+    const char * name;
+    void (*create_cb)(void);
+    uint32_t scene_time;
+    uint32_t cpu_avg_usage;
+    uint32_t fps_avg;
+    uint32_t render_avg_time;
+    uint32_t flush_avg_time;
+    uint32_t measurement_cnt;
+} lv_benchmark_scene_dsc_t;
+
+typedef struct {
+    /*
+     * List of scenes
+     * `create_cb` == NULL indicates the last stored scene
+     * Must not be free'd
+     */
+    lv_benchmark_scene_dsc_t * scenes;
+
+    int32_t total_avg_fps;
+    int32_t total_avg_cpu;
+    int32_t total_avg_render_time;
+    int32_t total_avg_flush_time;
+    int32_t valid_scene_cnt;
+} lv_benchmark_summary_t;
+
+typedef void (*lv_on_benchmark_end_cb_t)(const lv_benchmark_summary_t *);
+
 /**********************
  * GLOBAL PROTOTYPES
  **********************/
@@ -49,6 +77,18 @@ extern "C" {
  *     - the time spent with waiting for flush ready.
  */
 void lv_demo_benchmark(void);
+
+/*
+ * Register a function to call when the benchmark demo is over
+ */
+void lv_on_demo_benchmark_end(lv_on_benchmark_end_cb_t cb);
+
+
+/*
+ * Display and log the summary
+ * This function is called automatically if `lv_on_benchmark_end_cb` is not set
+ */
+void lv_demo_benchmark_summary_display(const lv_benchmark_summary_t * summary);
 
 /**********************
  *      MACROS
