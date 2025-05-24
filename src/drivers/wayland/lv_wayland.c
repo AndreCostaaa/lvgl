@@ -70,7 +70,7 @@
  *      TYPEDEFS
  **********************/
 
-struct application application;
+struct lv_wayland_context lv_wl_ctx;
 
 /**********************
  *  STATIC PROTOTYPES
@@ -103,7 +103,7 @@ static const struct wl_registry_listener registry_listener = {.global        = h
  */
 int lv_wayland_get_fd(void)
 {
-    return wl_display_get_fd(application.display);
+    return wl_display_get_fd(lv_wl_ctx.display);
 }
 
 bool lv_wayland_timer_handler(void)
