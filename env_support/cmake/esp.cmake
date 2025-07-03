@@ -57,11 +57,16 @@ else()
     list(APPEND DEMO_SOURCES ${DEMO_MUSIC_SOURCES})
     set_source_files_properties(${DEMO_MUSIC_SOURCES} COMPILE_FLAGS "-Wno-format")
   endif()
+  if(CONFIG_LV_USE_PPA)
+    list(APPEND IDF_COMPONENTS esp_driver_ppa)
+  endif()
+
+  list(APPEND IDF_COMPONENTS esp_timer esp_mm log)
 
   idf_component_register(SRCS ${SOURCES} ${EXAMPLE_SOURCES} ${DEMO_SOURCES}
       INCLUDE_DIRS ${LVGL_ROOT_DIR} ${LVGL_ROOT_DIR}/src ${LVGL_ROOT_DIR}/../
                    ${LVGL_ROOT_DIR}/examples ${LVGL_ROOT_DIR}/demos
-      REQUIRES  esp_timer esp_driver_ppa esp_mm log)
+      REQUIRES  ${IDF_COMPONENTS})
 endif()
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC "-DLV_CONF_INCLUDE_SIMPLE")
