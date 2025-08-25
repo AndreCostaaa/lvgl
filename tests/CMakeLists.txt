@@ -209,6 +209,7 @@ if(NOT (CMAKE_C_COMPILER_ID STREQUAL "MSVC"))
         -Wno-gnu-zero-variadic-macro-arguments
         -Wunused-function
 	-Wno-overlength-strings
+        -Wunsuffixed-float-constants
     )
 else()
     list(APPEND COMPILE_OPTIONS
