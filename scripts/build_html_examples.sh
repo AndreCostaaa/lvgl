@@ -10,25 +10,25 @@ COMMIT_REF="${2:-}"
 
 export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
 rm -rf emscripten_builder
-git clone https://github.com/lvgl/lv_sim_emscripten.git emscripten_builder
+git clone https://github.com/lvgl/lv_web_emscripten.git emscripten_builder
 scripts/genexamplelist.sh > emscripten_builder/examplelist.c
+
 cd emscripten_builder
 git submodule update --init -- lvgl
-cd lvgl
+
 if [ -n "$REPO_URL" ] && [ -n "$COMMIT_REF" ]; then
   echo "Using provided repo URL: $REPO_URL and commit ref: $COMMIT_REF for lvgl submodule"
-  git remote set-url origin "$REPO_URL"
-  git fetch origin
-  git checkout "$COMMIT_REF"
+  git -C lvgl remote set-url origin "$REPO_URL"
+  git -C lvgl fetch origin
+  git -C lvgl checkout "$COMMIT_REF"
 else
   CURRENT_REF="$(git rev-parse HEAD)"
   echo "Using current commit ref: $CURRENT_REF for lvgl"
-  git checkout "$CURRENT_REF"
+  git -C lvgl checkout "$CURRENT_REF"
 fi
-cd ..
 
 # Generate lv_conf
-LV_CONF_PATH=`pwd`/lvgl/configs/ci/docs/lv_conf_docs.h
+LV_CONF_PATH=$(pwd)/lvgl/configs/ci/docs/lv_conf_docs.h
 
 cp lvgl/lv_conf_template.h $LV_CONF_PATH
 python ./lvgl/scripts/generate_lv_conf.py \
@@ -36,10 +36,36 @@ python ./lvgl/scripts/generate_lv_conf.py \
   --config $LV_CONF_PATH \
   --defaults lvgl/configs/ci/docs/lv_conf_docs.defaults
 
-mkdir cmbuild
-cd cmbuild
-emcmake cmake .. -DLV_BUILD_CONF_PATH=$LV_CONF_PATH -DLVGL_CHOSEN_DEMO=lv_example_noop -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-emmake make -j$(nproc)
+echo "Installing GStreamer for Emscripten..."
+git clone https://gitlab.freedesktop.org/gstreamer/gst-build.git
+
+cd gst-build
+
+emconfigure meson setup builddir \
+  --prefix=$(pwd)/../gst-wasm-install \
+  --cross-file=$(pwd)/../lvgl/docs/examples/emscripten-cross.txt \
+  -Ddefault_library=static \
+  -Dexamples=disabled \
+  -Dtests=disabled
+
+emmake ninja -C builddir
+emmake ninja -C builddir install
+cd ..
+
+export PKG_CONFIG_PATH=$(pwd)/gst-wasm-install/lib/pkgconfig:$PKG_CONFIG_PATH
+
+rm -rf CMakeLists.txt
+cp $(pwd)/lvgl/docs/examples/CMakeLists.txt .
+
+emcmake cmake -B build \
+  -DLV_BUILD_CONF_PATH="$LV_CONF_PATH" \
+  -DLVGL_CHOSEN_DEMO=lv_example_noop \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+emmake cmake --build build -j$(nproc)
+
 rm -rf CMakeFiles
-cd ../..
-cp -a emscripten_builder/cmbuild docs/src/_static/built_lv_examples
+
+cd ..
+cp -a emscripten_builder/build docs/src/_static/built_lv_examples

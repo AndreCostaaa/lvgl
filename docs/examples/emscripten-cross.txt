@@ -1,0 +1,18 @@
+[binaries]
+c = 'emcc'
+cpp = 'em++'
+ar = 'emar'
+pkg-config = 'pkg-config'
+strip = 'emstrip'
+cmake = 'emcmake cmake'
+ld = 'emcc'
+exe_wrapper = 'node'   # run built programs under Node.js for tests
+
+[host_machine]
+system = 'emscripten'
+cpu_family = 'wasm32'
+cpu = 'wasm32'
+endian = 'little'
+
+[properties]
+needs_exe_wrapper = true
