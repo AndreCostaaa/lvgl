@@ -17,6 +17,7 @@
 #include "lv_wl_pointer_axis.h"
 #include "lv_wl_touch.h"
 #include "lv_wl_keyboard.h"
+#include <errno.h>
 
 #include "../../core/lv_refr.h"
 
@@ -31,6 +32,10 @@
 /**********************
  *  STATIC PROTOTYPES
  **********************/
+
+static void window_input_event_handler(lv_event_t * e);
+static void window_output_handler(struct window * window);
+static void window_output_event_handler(lv_event_t * e);
 
 static struct graphic_object * create_graphic_obj(struct window * window, enum object_type type,
                                                   struct graphic_object * parent);
@@ -134,6 +139,9 @@ lv_display_t * lv_wayland_window_create(uint32_t hor_res, uint32_t ver_res, char
     lv_wayland_shm_set_draw_buffers(&lv_wl_ctx.shm_ctx, window->lv_disp);
     lv_display_set_flush_cb(window->lv_disp, lv_wayland_shm_flush_partial_mode);
 #endif
+
+    lv_display_add_event_cb(window->lv_disp, window_input_event_handler, LV_EVENT_REFR_START, window);
+    lv_display_add_event_cb(window->lv_disp, window_output_event_handler, LV_EVENT_REFR_READY, window);
 
     /* Register input */
     window->lv_indev_pointer = lv_wayland_pointer_create();
@@ -365,6 +373,91 @@ const struct wl_callback_listener * lv_wayland_window_get_wl_surface_frame_liste
 /**********************
  *   STATIC FUNCTIONS
  **********************/
+
+static void window_input_event_handler(lv_event_t * e)
+{
+
+    struct window * window = (struct window *) lv_event_get_user_data(e);
+    handle_input();
+
+    LV_LOG_TRACE("handle timer frame: %d", window->frame_counter);
+
+    if(window != NULL && window->resize_pending) {
+        if(lv_wayland_window_resize(window, window->resize_width, window->resize_height) == LV_RESULT_OK) {
+            window->resize_width   = window->width;
+            window->resize_height  = window->height;
+            window->resize_pending = false;
+        }
+        else {
+            LV_LOG_TRACE("Failed to resize window frame: %d", window->frame_counter);
+        }
+    }
+    else if(window->shall_close == true) {
+        window_output_handler(window);
+        lv_wayland_deinit();
+        lv_event_mark_deleted(lv_event_get_target(e));
+    }
+
+}
+
+static void window_output_event_handler(lv_event_t * e)
+{
+    struct window * window = (struct window *) lv_event_get_user_data(e);
+    window_output_handler(window);
+}
+
+static void window_output_handler(struct window * window)
+{
+    bool shall_flush = lv_wl_ctx.cursor_flush_pending;
+
+    if((window->shall_close) && (window->close_cb != NULL)) {
+        window->shall_close = window->close_cb(window->lv_disp);
+    }
+
+    if(window->closed) {
+        return;
+    }
+
+    if(window->shall_close) {
+        window->closed      = true;
+        window->shall_close = false;
+        shall_flush         = true;
+
+        window->body->input.pointer.x            = 0;
+        window->body->input.pointer.y            = 0;
+        window->body->input.pointer.left_button  = LV_INDEV_STATE_RELEASED;
+        window->body->input.pointer.right_button = LV_INDEV_STATE_RELEASED;
+        window->body->input.pointer.wheel_button = LV_INDEV_STATE_RELEASED;
+        window->body->input.pointer.wheel_diff   = 0;
+        if(window->wl_ctx->pointer_obj == window->body) {
+            window->wl_ctx->pointer_obj = NULL;
+        }
+
+        window->body->input.keyboard.key   = 0;
+        window->body->input.keyboard.state = LV_INDEV_STATE_RELEASED;
+        if(window->wl_ctx->keyboard_obj == window->body) {
+            window->wl_ctx->keyboard_obj = NULL;
+        }
+        lv_wayland_window_destroy(window);
+    }
+
+    shall_flush |= window->flush_pending;
+
+    if(shall_flush) {
+        if(wl_display_flush(lv_wl_ctx.display) == -1) {
+            if(errno != EAGAIN) {
+                LV_LOG_ERROR("failed to flush wayland display");
+            }
+        }
+        else {
+            /* All data flushed */
+            lv_wl_ctx.cursor_flush_pending = false;
+            LV_LL_READ(&lv_wl_ctx.window_ll, window) {
+                window->flush_pending = false;
+            }
+        }
+    }
+}
 
 static struct window * create_window(struct lv_wayland_context * app, int width, int height, const char * title)
 {

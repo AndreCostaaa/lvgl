@@ -241,6 +241,8 @@ extern struct lv_wayland_context lv_wl_ctx;
 void lv_wayland_init(void);
 void lv_wayland_deinit(void);
 void lv_wayland_wait_flush_cb(lv_display_t * disp);
+void handle_input(void);
+
 /**********************
  *      Window
  **********************/
