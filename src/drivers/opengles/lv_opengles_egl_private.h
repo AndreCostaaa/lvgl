@@ -48,6 +48,8 @@ struct  _lv_egl_config {
 
 typedef struct {
     EGLint visual_id;
+    uint64_t * mods;
+    size_t mod_count;
 } lv_egl_native_window_properties_t;
 
 typedef void * (*lv_egl_init_display_t)(void * driver_data, int32_t width, int32_t height);

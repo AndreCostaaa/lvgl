@@ -501,25 +501,23 @@ static lv_result_t lv_egl_config_from_egl_config(lv_opengles_egl_t * ctx, lv_egl
 
 static void * create_native_window(lv_opengles_egl_t * ctx)
 {
-    EGLint native_config_id;
-    uint64_t * mods = NULL;
-    size_t mod_count = 0;
-    lv_result_t res = get_native_config(ctx, &native_config_id, &mods, &mod_count);
+
+    lv_egl_native_window_properties_t props = {0};
+    lv_result_t res = get_native_config(ctx, &props.visual_id, &props.mods, &props.mod_count);
 
     if(res == LV_RESULT_INVALID) {
         LV_LOG_ERROR("Failed to get native config");
         return NULL;
     }
 
-    lv_egl_native_window_properties_t properties = { .visual_id = native_config_id };
 
-    void * native_window = ctx->interface.create_window_cb(ctx->interface.driver_data, &properties);
+    void * native_window = ctx->interface.create_window_cb(ctx->interface.driver_data, &props);
     if(!native_window) {
         LV_LOG_ERROR("Faield to create window");
-        lv_free(mods);
+        lv_free(props.mods);
         return NULL;
     }
-    lv_free(mods);
+    lv_free(props.mods);
     return native_window;
 }
 
@@ -531,7 +529,6 @@ static lv_result_t get_native_config(lv_opengles_egl_t * ctx, EGLint * native_id
         LV_LOG_ERROR("Failed to get native visual id for egl config");
         return LV_RESULT_INVALID;
     }
-    return LV_RESULT_OK;
 
     if(!eglQueryDmaBufModifiersEXT || !eglQueryDmaBufModifiersEXT(ctx->egl_display, *native_id, 0, NULL, NULL, &num_mods)) {
         LV_LOG_WARN("Failed to get native modifiers");

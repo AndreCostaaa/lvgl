@@ -67,6 +67,12 @@ static void drm_destroy_window(void * driver_data, void * native_window);
 static size_t drm_egl_select_config_cb(void * driver_data, const lv_egl_config_t * configs, size_t config_count);
 static inline void set_viewport(lv_display_t * display);
 
+static bool drm_get_prop_value(lv_drm_ctx_t * ctx, drmModeObjectProperties * props, const char * name,
+                               uint64_t * out_value);
+static lv_result_t drm_get_format_mods(lv_drm_ctx_t * ctx, lv_array_t * result, uint32_t format, uint32_t crtc_index);
+static int drm_get_crtc_index(lv_drm_ctx_t * ctx);
+static lv_array_t drm_get_matching_mods(lv_drm_ctx_t * ctx, const lv_egl_native_window_properties_t * properties);
+
 /**********************
  *  STATIC VARIABLES
  **********************/
@@ -675,9 +681,17 @@ static void * drm_create_window(void * driver_data, const lv_egl_native_window_p
     LV_ASSERT_NULL(ctx->gbm_dev);
 
     uint32_t format = properties->visual_id;
+    lv_array_t modifiers = drm_get_matching_mods(ctx, properties);
 
-    ctx->gbm_surface = gbm_surface_create(ctx->gbm_dev, ctx->drm_mode->hdisplay, ctx->drm_mode->vdisplay, format,
-                                          GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    if(lv_array_is_empty(&modifiers)) {
+        ctx->gbm_surface = gbm_surface_create(ctx->gbm_dev, ctx->drm_mode->hdisplay, ctx->drm_mode->vdisplay, format,
+                                              GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    }
+    else {
+        ctx->gbm_surface = gbm_surface_create_with_modifiers(ctx->gbm_dev, ctx->drm_mode->hdisplay,
+                                                             ctx->drm_mode->vdisplay,
+                                                             format, (uint64_t *)modifiers.data, lv_array_size(&modifiers));
+    }
     if(!ctx->gbm_surface) {
         LV_LOG_ERROR("Failed to create GBM surface");
         return NULL;
@@ -711,5 +725,173 @@ static void drm_destroy_window(void * driver_data, void * native_window)
     ctx->gbm_surface = NULL;
 }
 
+static drmModePropertyBlobRes * get_plane_in_formats_blob(lv_drm_ctx_t * ctx, drmModePlane * plane)
+{
+    drmModeObjectProperties * props = drmModeObjectGetProperties(ctx->fd, plane->plane_id, DRM_MODE_OBJECT_PLANE);
+    if(!props) {
+        return NULL;
+    }
+
+    uint64_t type = 0;
+    uint64_t blob_id = 0;
+    uint64_t val = 0;
+    if(drm_get_prop_value(ctx, props, "type", &val)) {
+        type = val;
+    }
+    if(type != DRM_PLANE_TYPE_PRIMARY) {
+        drmModeFreeObjectProperties(props);
+        return NULL;
+    }
+    if(drm_get_prop_value(ctx, props, "IN_FORMATS", &val)) {
+        blob_id = val;
+    }
+
+    drmModeFreeObjectProperties(props);
+
+    if(!blob_id) {
+        return NULL;
+    }
+
+    return drmModeGetPropertyBlob(ctx->fd, (uint32_t)blob_id);
+
+
+}
+static uint32_t get_plane_in_formats_mask(lv_drm_ctx_t * ctx, struct drm_format_modifier_blob * data, uint32_t format)
+{
+    LV_UNUSED(ctx);
+    uint32_t * fmts = (uint32_t *)((char *)data + data->formats_offset);
+
+    for(uint32_t fi = 0; fi < data->count_formats; ++fi) {
+        if(fmts[fi] == format) {
+            return 1u << (uint32_t)(&fmts[fi] - fmts);
+        }
+    }
+    return 0;
+}
+static int drm_get_crtc_index(lv_drm_ctx_t * ctx)
+{
+    LV_ASSERT_NULL(ctx->drm_resources);
+    LV_ASSERT_NULL(ctx->drm_crtc);
+
+    for(int i = 0; i < ctx->drm_resources->count_crtcs; ++i) {
+        if(ctx->drm_resources->crtcs[i] == ctx->drm_crtc->crtc_id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static lv_array_t drm_get_matching_mods(lv_drm_ctx_t * ctx, const lv_egl_native_window_properties_t * properties)
+{
+    lv_array_t result;
+    lv_array_init(&result, 0, sizeof(*properties->mods));
+    int crtc_index_res = drm_get_crtc_index(ctx);
+    if(crtc_index_res < 0) {
+        LV_LOG_WARN("Failed to get crtc index");
+        return result;
+    }
+
+    /* Safe cast as per the check above */
+    uint32_t crtc_index = (uint32_t)crtc_index_res;
+
+    lv_array_t modifiers;
+    lv_array_init(&modifiers, 0, sizeof(*properties->mods));
+    lv_result_t res = drm_get_format_mods(ctx, &modifiers, properties->visual_id, crtc_index);
+    if(res != LV_RESULT_OK) {
+        LV_LOG_WARN("Failed to get drm format mods");
+        return result;
+    }
+
+    const uint32_t drm_modifiers_count = lv_array_size(&modifiers);
+    if(drm_modifiers_count == 0) {
+        lv_array_deinit(&modifiers);
+        return result;
+    }
+
+    for(size_t i = 0; i < properties->mod_count; ++i) {
+        for(size_t j = 0; j < drm_modifiers_count; ++j) {
+            uint64_t drm_modifier = *(uint64_t *)lv_array_at(&modifiers, j);
+            uint64_t egl_modifier = properties->mods[i];
+            if(drm_modifier == egl_modifier) {
+                lv_array_push_back(&result, &drm_modifier);
+            }
+        }
+    }
+    return result;
+}
+static lv_result_t drm_get_format_mods(lv_drm_ctx_t * ctx, lv_array_t * result, uint32_t format, uint32_t crtc_index)
+{
+    drmModePlaneRes * plane_res = drmModeGetPlaneResources(ctx->fd);
+    if(!plane_res) {
+        LV_LOG_WARN("Couldn't get plane resources");
+        return LV_RESULT_INVALID;
+    }
+
+    for(uint32_t i = 0; i < plane_res->count_planes; ++i) {
+        drmModePlane * plane = drmModeGetPlane(ctx->fd, plane_res->planes[i]);
+        if(!plane) continue;
+
+        if(!(plane->possible_crtcs & (1u << crtc_index))) {
+            drmModeFreePlane(plane);
+            continue;
+        }
+
+        drmModePropertyBlobRes * blob = get_plane_in_formats_blob(ctx, plane);;
+        if(!blob) {
+            drmModeFreePlane(plane);
+            continue;
+        }
+        if(!blob->data) {
+            drmModeFreePropertyBlob(blob);
+            drmModeFreePlane(plane);
+            continue;
+        }
+        struct drm_format_modifier_blob * data = (struct drm_format_modifier_blob *)blob->data;
+
+        uint32_t fmt_mask = get_plane_in_formats_mask(ctx, data, format);
+        if(!fmt_mask) {
+            drmModeFreePropertyBlob(blob);
+            drmModeFreePlane(plane);
+            continue;
+
+        }
+        struct drm_format_modifier * modifiers = (struct drm_format_modifier *)((char *)data +
+                                                                                data->modifiers_offset);
+
+        for(uint32_t m = 0; m < data->count_modifiers; ++m) {
+            if(!(modifiers[m].formats & fmt_mask)) {
+                continue;
+            }
+            lv_array_push_back(result, &modifiers[m].modifier);
+        }
+
+        drmModeFreePropertyBlob(blob);
+        drmModeFreePlane(plane);
+    }
+
+    drmModeFreePlaneResources(plane_res);
+    return LV_RESULT_OK;
+}
+static bool drm_get_prop_value(lv_drm_ctx_t * ctx, drmModeObjectProperties * props, const char * name,
+                               uint64_t * out_value)
+{
+    LV_ASSERT_NULL(props);
+    LV_ASSERT_NULL(name);
+    LV_ASSERT_NULL(out_value);
+
+    for(uint32_t i = 0; i < props->count_props; ++i) {
+        drmModePropertyRes * prop = drmModeGetProperty(ctx->fd, props->props[i]);
+        if(!prop) {
+            continue;
+        }
+        if(lv_streq(prop->name, name)) {
+            *out_value = props->prop_values[i];
+            drmModeFreeProperty(prop);
+            return true;
+        }
+        drmModeFreeProperty(prop);
+    }
+    return false;
+}
 
 #endif /*LV_USE_LINUX_DRM && LV_LINUX_DRM_USE_EGL*/
