@@ -247,7 +247,7 @@ static void flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * px_m
 void drm_device_deinit(lv_drm_ctx_t * ctx)
 {
     if(ctx->drm_crtc) {
-        drmModeSetCrtc(ctx->fd,
+        drmModeSetCrtc(ctx->display_fd,
                        ctx->drm_crtc->crtc_id,
                        ctx->drm_crtc->buffer_id,
                        ctx->drm_crtc->x,
@@ -276,10 +276,10 @@ void drm_device_deinit(lv_drm_ctx_t * ctx)
         drmModeFreeResources(ctx->drm_resources);
         ctx->drm_resources = NULL;
     }
-    if(ctx->fd > 0) {
-        drmClose(ctx->fd);
+    if(ctx->gpu_fd > 0) {
+        drmClose(ctx->gpu_fd);
     }
-    ctx->fd = 0;
+    ctx->gpu_fd = 0;
     ctx->drm_mode = NULL;
     lv_free(ctx);
 }
@@ -298,7 +298,7 @@ static int drm_do_page_flip(lv_drm_ctx_t * ctx, int timeout_ms)
 {
     fd_set fds;
     FD_ZERO(&fds);
-    FD_SET(ctx->fd, &fds);
+    FD_SET(ctx->gpu_fd, &fds);
 
     drmEventContext event_ctx;
     lv_memset(&event_ctx, 0, sizeof(event_ctx));
@@ -310,14 +310,14 @@ static int drm_do_page_flip(lv_drm_ctx_t * ctx, int timeout_ms)
     if(timeout_ms >= 0) {
         timeout.tv_sec = timeout_ms / 1000;
         timeout.tv_usec = (timeout_ms % 1000) * 1000;
-        status = select(ctx->fd + 1, &fds, NULL, NULL, &timeout);
+        status = select(ctx->gpu_fd + 1, &fds, NULL, NULL, &timeout);
     }
     else {
-        status = select(ctx->fd + 1, &fds, NULL, NULL, NULL);
+        status = select(ctx->gpu_fd + 1, &fds, NULL, NULL, NULL);
     }
 
     if(status == 1) {
-        drmHandleEvent(ctx->fd, &event_ctx);
+        drmHandleEvent(ctx->gpu_fd, &event_ctx);
     }
     return status;
 }
@@ -358,7 +358,7 @@ static drm_fb_state_t * drm_fb_state_create(lv_drm_ctx_t * ctx, struct gbm_bo * 
     uint64_t addfb2_mods = 0;
     int32_t status;
 
-    drmGetCap(ctx->fd, DRM_CAP_ADDFB2_MODIFIERS, &addfb2_mods);
+    drmGetCap(ctx->gpu_fd, DRM_CAP_ADDFB2_MODIFIERS, &addfb2_mods);
 
     for(int i = 0; i < gbm_bo_get_plane_count(bo); i++) {
         handles[i] = gbm_bo_get_handle_for_plane(bo, i).u32;
@@ -368,12 +368,12 @@ static drm_fb_state_t * drm_fb_state_create(lv_drm_ctx_t * ctx, struct gbm_bo * 
     }
 
     if(addfb2_mods && modifier != DRM_FORMAT_MOD_INVALID) {
-        status = drmModeAddFB2WithModifiers(ctx->fd, width, height, format,
+        status = drmModeAddFB2WithModifiers(ctx->display_fd, width, height, format,
                                             handles, strides, offsets, modifiers,
                                             &fb_id, DRM_MODE_FB_MODIFIERS);
     }
     else {
-        status = drmModeAddFB2(ctx->fd, width, height, format,
+        status = drmModeAddFB2(ctx->display_fd, width, height, format,
                                handles, strides, offsets, &fb_id, 0);
     }
 
@@ -388,7 +388,7 @@ static drm_fb_state_t * drm_fb_state_create(lv_drm_ctx_t * ctx, struct gbm_bo * 
         return NULL;
     }
 
-    fb->fd = ctx->fd;
+    fb->fd = ctx->display_fd;
     fb->bo = bo;
     fb->fb_id = fb_id;
 
@@ -427,7 +427,7 @@ static void drm_flip_cb(void * driver_data, bool vsync)
 
     if(!ctx->gbm_bo_flipped) {
         if(!ctx->crtc_isset) {
-            int status = drmModeSetCrtc(ctx->fd, ctx->drm_encoder->crtc_id, pending_fb->fb_id, 0, 0,
+            int status = drmModeSetCrtc(ctx->display_fd, ctx->drm_encoder->crtc_id, pending_fb->fb_id, 0, 0,
                                         &(ctx->drm_connector->connector_id), 1, ctx->drm_mode);
             if(status < 0) {
                 LV_LOG_ERROR("Failed to set crtc: %d", status);
@@ -444,7 +444,7 @@ static void drm_flip_cb(void * driver_data, bool vsync)
 
 
         uint32_t flip_flags = DRM_MODE_PAGE_FLIP_EVENT;
-        int status = drmModePageFlip(ctx->fd, ctx->drm_encoder->crtc_id, pending_fb->fb_id, flip_flags, ctx);
+        int status = drmModePageFlip(ctx->display_fd, ctx->drm_encoder->crtc_id, pending_fb->fb_id, flip_flags, ctx);
         if(status < 0) {
             LV_LOG_ERROR("Failed to enqueue page flip: %d", status);
             return;
@@ -467,20 +467,28 @@ static lv_result_t drm_device_init(lv_drm_ctx_t * ctx, const char * path)
         LV_LOG_ERROR("Device path must not be NULL");
         return LV_RESULT_INVALID;
     }
-    int ret = open(path, O_RDWR);
+    int ret = open("/dev/dri/card0", O_RDWR);
     if(ret < 0) {
         LV_LOG_ERROR("Failed to open device path '%s'", path);
         goto open_err;
     }
-    ctx->fd = ret;
+    ctx->gpu_fd = ret;
 
-    ret = drmSetClientCap(ctx->fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+    ret = open("/dev/dri/card1", O_RDWR);
+    if(ret < 0) {
+        LV_LOG_ERROR("Failed to open device path '%s'", path);
+        goto open_err;
+    }
+
+    ctx->display_fd = ret;
+
+    ret = drmSetClientCap(ctx->display_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
     if(ret < 0) {
         LV_LOG_ERROR("Failed to set universal planes capability");
         goto set_client_cap_err;
     }
 
-    ctx->drm_resources = drmModeGetResources(ctx->fd);
+    ctx->drm_resources = drmModeGetResources(ctx->display_fd);
     if(!ctx->drm_resources) {
         LV_LOG_ERROR("Failed to get card resources");
         goto get_resources_err;
@@ -504,13 +512,13 @@ static lv_result_t drm_device_init(lv_drm_ctx_t * ctx, const char * path)
         goto get_encoder_err;
     }
 
-    ctx->gbm_dev = gbm_create_device(ctx->fd);
+    ctx->gbm_dev = gbm_create_device(ctx->gpu_fd);
     if(!ctx->gbm_dev) {
         LV_LOG_ERROR("Failed to create gbm device");
         goto gbm_create_device_err;
     }
 
-    if(drmSetMaster(ctx->fd) < 0) {
+    if(drmSetMaster(ctx->gpu_fd) < 0) {
         LV_LOG_ERROR("Failed to become DRM master");
         goto set_master_err;
     }
@@ -542,8 +550,8 @@ get_connector_err:
 get_resources_err:
     /* Nothing special to do */
 set_client_cap_err:
-    close(ctx->fd);
-    ctx->fd = 0;
+    close(ctx->gpu_fd);
+    ctx->gpu_fd = 0;
 open_err:
     return LV_RESULT_INVALID;
 }
@@ -553,13 +561,13 @@ static size_t drm_egl_select_config_cb(void * driver_data, const lv_egl_config_t
     lv_drm_ctx_t * ctx = (lv_drm_ctx_t *)driver_data;
     int32_t target_w = lv_display_get_horizontal_resolution(ctx->display);
     int32_t target_h = lv_display_get_vertical_resolution(ctx->display);
-    lv_color_format_t target_cf = lv_display_get_color_format(ctx->display);
+    lv_color_format_t target_cf = LV_COLOR_FORMAT_ARGB8888;// lv_display_get_color_format(ctx->display);
 
     for(size_t i = 0; i < config_count; ++i) {
-        LV_LOG_TRACE("Got config %zu %#x %dx%d %d %d %d %d buffer size %d depth %d  samples %d stencil %d surface type %d",
-                     i, configs[i].id,
-                     configs[i].max_width, configs[i].max_height, configs[i].r_bits, configs[i].g_bits, configs[i].b_bits, configs[i].a_bits,
-                     configs[i].buffer_size, configs[i].depth, configs[i].samples, configs[i].stencil, configs[i].surface_type);
+        LV_LOG_USER("Got config %zu %#x %dx%d %d %d %d %d buffer size %d depth %d  samples %d stencil %d surface type %d",
+                    i, configs[i].id,
+                    configs[i].max_width, configs[i].max_height, configs[i].r_bits, configs[i].g_bits, configs[i].b_bits, configs[i].a_bits,
+                    configs[i].buffer_size, configs[i].depth, configs[i].samples, configs[i].stencil, configs[i].surface_type);
     }
 
     for(size_t i = 0; i < config_count; ++i) {
@@ -569,7 +577,7 @@ static size_t drm_egl_select_config_cb(void * driver_data, const lv_egl_config_t
            config_cf == target_cf &&
            configs[i].surface_type & EGL_WINDOW_BIT
           ) {
-            LV_LOG_TRACE("Choosing config %zu", i);
+            LV_LOG_USER("Choosing config %zu", i);
             return i;
         }
     }
@@ -600,7 +608,7 @@ static drmModeConnector * drm_get_connector(lv_drm_ctx_t * ctx)
 
     LV_ASSERT_NULL(ctx->drm_resources);
     for(int i = 0; i < ctx->drm_resources->count_connectors; i++) {
-        connector = drmModeGetConnector(ctx->fd, ctx->drm_resources->connectors[i]);
+        connector = drmModeGetConnector(ctx->display_fd, ctx->drm_resources->connectors[i]);
         if(connector->connection == DRM_MODE_CONNECTED && connector->count_modes > 0) {
             return connector;
         }
@@ -633,7 +641,7 @@ static drmModeModeInfo * drm_get_mode(lv_drm_ctx_t * ctx)
 
 static drmModeCrtc * drm_get_crtc(lv_drm_ctx_t * ctx)
 {
-    drmModeCrtc * crtc = drmModeGetCrtc(ctx->fd, ctx->drm_encoder->crtc_id);
+    drmModeCrtc * crtc = drmModeGetCrtc(ctx->display_fd, ctx->drm_encoder->crtc_id);
     if(crtc) {
         return crtc;
     }
@@ -642,7 +650,7 @@ static drmModeCrtc * drm_get_crtc(lv_drm_ctx_t * ctx)
     for(int i = 0; i < ctx->drm_resources->count_crtcs; i++) {
         if(ctx->drm_encoder->possible_crtcs & (1 << i)) {
             ctx->drm_encoder->crtc_id = ctx->drm_resources->crtcs[i];
-            crtc = drmModeGetCrtc(ctx->fd, ctx->drm_encoder->crtc_id);
+            crtc = drmModeGetCrtc(ctx->display_fd, ctx->drm_encoder->crtc_id);
             break;
         }
     }
@@ -654,7 +662,7 @@ static drmModeEncoder * drm_get_encoder(lv_drm_ctx_t * ctx)
     LV_ASSERT_NULL(ctx->drm_connector);
     drmModeEncoder * encoder = NULL;
     for(int i = 0; i < ctx->drm_resources->count_encoders; i++) {
-        encoder = drmModeGetEncoder(ctx->fd, ctx->drm_resources->encoders[i]);
+        encoder = drmModeGetEncoder(ctx->display_fd, ctx->drm_resources->encoders[i]);
         if(!encoder) {
             continue;
         }
@@ -676,8 +684,17 @@ static void * drm_create_window(void * driver_data, const lv_egl_native_window_p
 
     uint32_t format = properties->visual_id;
 
+    LV_LOG_USER("Creating GBM surface:");
+    LV_LOG_USER("  gbm_dev: %p", ctx->gbm_dev);
+    LV_LOG_USER("  size: %dx%d", ctx->drm_mode->hdisplay, ctx->drm_mode->vdisplay);
+    LV_LOG_USER("  format: 0x%x", format);
+    LV_LOG_USER("  backend: %s", gbm_device_get_backend_name(ctx->gbm_dev));
+    if(format == 0) {
+        LV_LOG_ERROR("Invalid format requested");
+        return NULL;
+    }
     ctx->gbm_surface = gbm_surface_create(ctx->gbm_dev, ctx->drm_mode->hdisplay, ctx->drm_mode->vdisplay, format,
-                                          GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+                                          GBM_BO_USE_RENDERING);
     if(!ctx->gbm_surface) {
         LV_LOG_ERROR("Failed to create GBM surface");
         return NULL;

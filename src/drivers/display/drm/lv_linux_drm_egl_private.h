@@ -50,7 +50,8 @@ typedef struct {
     struct gbm_bo * gbm_bo_flipped;
     struct gbm_bo * gbm_bo_presented;
 
-    int fd;
+    int gpu_fd;
+    int display_fd;
     bool crtc_isset;
 } lv_drm_ctx_t;
 
