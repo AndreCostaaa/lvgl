@@ -56,6 +56,8 @@
 /**********************
  *  STATIC PROTOTYPES
  **********************/
+
+static char * get_full_path(const char * path);
 static bool screenshot_compare(const char * fn_ref, uint8_t tolerance);
 static unsigned  read_png_file(lv_draw_buf_t ** refr_draw_buf, unsigned * width, unsigned * height,
                                const char * file_name);
@@ -89,10 +91,38 @@ bool lv_test_screenshot_compare(const char * fn_ref)
     return true;
 }
 
+lv_draw_buf_t * lv_test_screenshot_load_from_path(const char * path)
+{
+    char * full_path = get_full_path(path);
+    if(!full_path) {
+        return NULL;
+    }
+
+    lv_draw_buf_t * ref_draw_buf;
+    unsigned ref_img_width = 0;
+    unsigned ref_img_height = 0;
+    unsigned res = read_png_file(&ref_draw_buf, &ref_img_width, &ref_img_height, full_path);
+    if(res) {
+        return NULL;
+    }
+    return ref_draw_buf;
+
+}
+
 /**********************
  *   STATIC FUNCTIONS
  **********************/
 
+static char * get_full_path(const char * path)
+{
+    char * full_path = lv_zalloc(256);
+    LV_ASSERT_MALLOC(full_path);
+    if(!full_path) {
+        return NULL;
+    }
+    lv_snprintf(full_path, 256, "%s%s", REF_IMGS_PATH, path);
+    return full_path;
+}
 /**
  * Compare the content of the frame buffer with a reference image
  * @param fn_ref    reference image path
