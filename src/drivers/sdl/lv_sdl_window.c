@@ -392,6 +392,7 @@ static void window_create(lv_display_t * disp)
 #if LV_SDL_FULLSCREEN
     flag |= SDL_WINDOW_FULLSCREEN;
 #endif
+    flag |= SDL_WINDOW_ALLOW_HIGHDPI;
 
     int32_t hor_res = (int32_t)((float)(disp->hor_res) * dsc->zoom);
     int32_t ver_res = (int32_t)((float)(disp->ver_res) * dsc->zoom);
@@ -401,6 +402,15 @@ static void window_create(lv_display_t * disp)
 
     dsc->renderer = SDL_CreateRenderer(dsc->window, -1,
                                        LV_SDL_ACCELERATED ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE);
+    int draw_width, draw_height;
+    SDL_GL_GetDrawableSize(dsc->window, &draw_width, &draw_height);
+
+    LV_LOG_USER("Drawable size W %d H %d", draw_width, draw_height);
+    SDL_RenderSetLogicalSize(dsc->renderer, hor_res, ver_res);
+
+    SDL_GL_GetDrawableSize(dsc->window, &draw_width, &draw_height);
+    LV_LOG_USER("Drawable size W %d H %d", draw_width, draw_height);
+
 #if LV_USE_DRAW_SDL == 0
     texture_resize(disp);
 
