@@ -182,7 +182,7 @@ void lv_wayland_xdg_shell_configure_surface(struct window * window)
     // configure event
     window->is_window_configured = false;
     wl_surface_commit(window->body->surface);
-    wl_display_roundtrip(lv_wl_ctx.display);
+    wl_display_roundtrip(lv_wl_ctx.compositor_connection);
     LV_ASSERT_MSG(window->is_window_configured, "Failed to receive the xdg_surface configuration event");
 }
 
@@ -210,18 +210,19 @@ lv_result_t lv_wayland_xdg_shell_destroy_window_toplevel(struct window * window)
  *   Shell Input
  **********************/
 
-void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, uint32_t serial, uint32_t button,
+void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat_pointer, uint32_t serial,
+                                               uint32_t button,
                                                uint32_t state)
 {
-    struct window * window = app->pointer_obj->window;
-    int pos_x              = (int)app->pointer_obj->input.pointer.x;
-    int pos_y              = (int)app->pointer_obj->input.pointer.y;
+    struct window * window = seat_pointer->current_pointed_obj->window;
+    int pos_x = seat_pointer->point.x;
+    int pos_y = seat_pointer->point.y;
 
-    switch(app->pointer_obj->type) {
+    switch(seat_pointer->current_pointed_obj->type) {
         case OBJECT_TITLEBAR:
             if((button == BTN_LEFT) && (state == WL_POINTER_BUTTON_STATE_PRESSED)) {
                 if(window->xdg_toplevel) {
-                    xdg_toplevel_move(window->xdg_toplevel, app->wl_seat, serial);
+                    xdg_toplevel_move(window->xdg_toplevel, lv_wl_ctx.seat.wl_seat, serial);
                     window->flush_pending = true;
                 }
             }
@@ -254,7 +255,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, 
                     else {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_TOP;
                     }
-                    xdg_toplevel_resize(window->xdg_toplevel, window->wl_ctx->wl_seat, serial, edge);
+                    xdg_toplevel_resize(window->xdg_toplevel, lv_wl_ctx.seat.wl_seat, serial, edge);
                     window->flush_pending = true;
                 }
             }
@@ -272,7 +273,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, 
                     else {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
                     }
-                    xdg_toplevel_resize(window->xdg_toplevel, window->wl_ctx->wl_seat, serial, edge);
+                    xdg_toplevel_resize(window->xdg_toplevel, lv_wl_ctx.seat.wl_seat, serial, edge);
                     window->flush_pending = true;
                 }
             }
@@ -290,7 +291,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, 
                     else {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
                     }
-                    xdg_toplevel_resize(window->xdg_toplevel, window->wl_ctx->wl_seat, serial, edge);
+                    xdg_toplevel_resize(window->xdg_toplevel, lv_wl_ctx.seat.wl_seat, serial, edge);
                     window->flush_pending = true;
                 }
             }
@@ -308,7 +309,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, 
                     else {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
                     }
-                    xdg_toplevel_resize(window->xdg_toplevel, window->wl_ctx->wl_seat, serial, edge);
+                    xdg_toplevel_resize(window->xdg_toplevel, lv_wl_ctx.seat.wl_seat, serial, edge);
                     window->flush_pending = true;
                 }
             }
@@ -320,18 +321,18 @@ void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, 
     }
 }
 
-const char * lv_wayland_xdg_shell_get_cursor_name(const struct lv_wayland_context * app)
+const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * seat_pointer)
 {
 
-    if(!app->pointer_obj->window->xdg_toplevel || app->opt_disable_decorations) {
+    if(!seat_pointer->current_pointed_obj->window->xdg_toplevel || lv_wl_ctx.opt_disable_decorations) {
         return LV_WAYLAND_DEFAULT_CURSOR_NAME;
     }
-    int pos_x = (int)app->pointer_obj->input.pointer.x;
-    int pos_y = (int)app->pointer_obj->input.pointer.y;
+    int pos_x = seat_pointer->point.x;
+    int pos_y = seat_pointer->point.y;
 
-    struct window * window = app->pointer_obj->window;
+    struct window * window = seat_pointer->current_pointed_obj->window;
 
-    switch(app->pointer_obj->type) {
+    switch(seat_pointer->current_pointed_obj->type) {
         case OBJECT_BORDER_TOP:
             if(window->maximized) {
                 // do nothing

@@ -34,9 +34,8 @@ typedef void (*lv_wayland_backend_deinit_t)(void * backend_data);
 
 typedef lv_result_t (*lv_wayland_backend_init_display_t)(void * backend_data, lv_display_t * display, int32_t width,
                                                          int32_t height);
-typedef lv_result_t (*lv_wayland_backend_resize_display_t)(void * backend_data, lv_display_t * display, int32_t width,
-                                                           int32_t height);
-typedef lv_result_t (*lv_wayland_backend_destroy_display_t)(void * backend_data, lv_display_t * display);
+typedef lv_result_t (*lv_wayland_backend_resize_display_t)(void * backend_data, lv_display_t * display);
+typedef void (*lv_wayland_backend_destroy_display_t)(void * backend_data, lv_display_t * display);
 
 typedef void (*lv_wayland_backend_global_handler_t)(void * backend_data, struct wl_registry * registry, uint32_t name,
                                                     const char * interface, uint32_t version);
@@ -50,9 +49,7 @@ typedef struct {
     lv_wayland_backend_deinit_t deinit;
 } lv_wayland_backend_ops_t;
 
-#if 0
 extern const lv_wayland_backend_ops_t wl_backend_ops;
-#endif
 
 /**********************
  * GLOBAL PROTOTYPES

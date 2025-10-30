@@ -189,6 +189,7 @@ void lv_wayland_shm_delete_draw_buffers(shm_ctx_t * context, struct window * win
     LV_UNUSED(context);
     if(window->lv_draw_buf) lv_draw_buf_destroy(window->lv_draw_buf);
 }
+#if 0 /* TODO: Remove*/
 void lv_wayland_shm_flush_partial_mode(lv_display_t * disp, const lv_area_t * area, unsigned char * color_p)
 {
     struct window * window    = lv_display_get_driver_data(disp);
@@ -279,6 +280,7 @@ skip:
         window->body->pending_buffer = NULL;
     }
 }
+#endif
 
 /**********************
  *   STATIC FUNCTIONS

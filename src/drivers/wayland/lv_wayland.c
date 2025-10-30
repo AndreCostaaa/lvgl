@@ -6,7 +6,8 @@
  *      INCLUDES
  *********************/
 
-#include "lv_wayland.h"
+#include "lv_wayland_private.h"
+#include <src/drivers/wayland/lv_wl_backend.h>
 
 #if LV_USE_WAYLAND
 
@@ -139,7 +140,7 @@ static const struct wl_output_listener output_listener = {
  */
 int lv_wayland_get_fd(void)
 {
-    return wl_display_get_fd(lv_wl_ctx.display);
+    return wl_display_get_fd(lv_wl_ctx.compositor_connection);
 }
 
 /**********************
@@ -153,30 +154,23 @@ void lv_wayland_init(void)
         return;
     }
 
-    // Create XKB context
-    lv_wl_ctx.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    LV_ASSERT_MSG(lv_wl_ctx.xkb_context, "failed to create XKB context");
-    if(lv_wl_ctx.xkb_context == NULL) {
-        return;
-    }
-
     // Connect to Wayland display
-    lv_wl_ctx.display = wl_display_connect(NULL);
-    LV_ASSERT_MSG(lv_wl_ctx.display, "failed to connect to Wayland server");
-    if(lv_wl_ctx.display == NULL) {
+    lv_wl_ctx.compositor_connection = wl_display_connect(NULL);
+    LV_ASSERT_MSG(lv_wl_ctx.compositor_connection, "failed to connect to Wayland server");
+    if(lv_wl_ctx.compositor_connection == NULL) {
         return;
     }
 
 #if LV_WAYLAND_USE_DMABUF
     lv_wayland_dmabuf_initalize_context(&lv_wl_ctx.dmabuf_ctx);
 #endif
-    lv_wayland_shm_initalize_context(&lv_wl_ctx.shm_ctx);
+    wl_backend_ops.init();
 
     /* Add registry listener and wait for registry reception */
-    lv_wl_ctx.registry = wl_display_get_registry(lv_wl_ctx.display);
+    lv_wl_ctx.registry = wl_display_get_registry(lv_wl_ctx.compositor_connection);
     wl_registry_add_listener(lv_wl_ctx.registry, &registry_listener, &lv_wl_ctx);
-    wl_display_dispatch(lv_wl_ctx.display);
-    wl_display_roundtrip(lv_wl_ctx.display);
+    wl_display_dispatch(lv_wl_ctx.compositor_connection);
+    wl_display_roundtrip(lv_wl_ctx.compositor_connection);
 
     LV_ASSERT_MSG(lv_wl_ctx.compositor, "Wayland compositor not available");
     if(lv_wl_ctx.compositor == NULL) {
@@ -188,10 +182,6 @@ void lv_wayland_init(void)
     if(!shm_ready) {
         LV_LOG_ERROR("Couldn't initialize wayland SHM");
         return;
-    }
-    lv_wl_ctx.cursor_theme = lv_wayland_shm_load_cursor_theme(&lv_wl_ctx.shm_ctx);
-    if(!lv_wl_ctx.cursor_theme) {
-        LV_LOG_WARN("Failed to initialize the cursor theme");
     }
 
 #if LV_WAYLAND_USE_DMABUF
@@ -213,7 +203,7 @@ void lv_wayland_init(void)
     lv_tick_set_cb(tick_get_cb);
 
     /* Used to wait for events when the window is minimized or hidden */
-    lv_wl_ctx.wayland_pfd.fd     = wl_display_get_fd(lv_wl_ctx.display);
+    lv_wl_ctx.wayland_pfd.fd     = wl_display_get_fd(lv_wl_ctx.compositor_connection);
     lv_wl_ctx.wayland_pfd.events = POLLIN;
 
     is_wayland_initialized = true;
@@ -231,25 +221,18 @@ void lv_wayland_deinit(void)
         /* TODO: This should probably be moved inside lv_wayland_window_destroy but not sure about the if condition */
 #if LV_WAYLAND_USE_DMABUF
         lv_wayland_dmabuf_destroy_draw_buffers(&lv_wl_ctx.dmabuf_ctx, window);
-#else
-        lv_wayland_shm_delete_draw_buffers(&lv_wl_ctx.shm_ctx, window);
 #endif
         lv_display_delete(window->lv_disp);
     }
 
-    lv_wayland_shm_deinit(&lv_wl_ctx.shm_ctx);
 #if LV_WAYLAND_USE_DMABUF
     lv_wayland_dmabuf_deinit(&lv_wl_ctx.dmabuf_ctx);
 #endif
 
     lv_wayland_xdg_shell_deinit();
 
-    if(lv_wl_ctx.wl_seat) {
-        wl_seat_destroy(lv_wl_ctx.wl_seat);
-    }
-
-    if(lv_wl_ctx.subcompositor) {
-        wl_subcompositor_destroy(lv_wl_ctx.subcompositor);
+    if(lv_wl_ctx.seat.wl_seat) {
+        lv_wayland_seat_deinit(&lv_wl_ctx.seat);
     }
 
     if(lv_wl_ctx.compositor) {
@@ -257,8 +240,8 @@ void lv_wayland_deinit(void)
     }
 
     wl_registry_destroy(lv_wl_ctx.registry);
-    wl_display_flush(lv_wl_ctx.display);
-    wl_display_disconnect(lv_wl_ctx.display);
+    wl_display_flush(lv_wl_ctx.compositor_connection);
+    wl_display_disconnect(lv_wl_ctx.compositor_connection);
 
     lv_ll_clear(&lv_wl_ctx.window_ll);
 }
@@ -338,47 +321,42 @@ static uint32_t tick_get_cb(void)
 static void handle_global(void * data, struct wl_registry * registry, uint32_t name, const char * interface,
                           uint32_t version)
 {
-    struct lv_wayland_context * app = data;
+    struct lv_wayland_context * ctx = data;
 
     LV_UNUSED(version);
     LV_UNUSED(data);
 
     if(strcmp(interface, wl_compositor_interface.name) == 0) {
-        app->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 1);
-    }
-    else if(strcmp(interface, wl_subcompositor_interface.name) == 0) {
-        app->subcompositor = wl_registry_bind(registry, name, &wl_subcompositor_interface, 1);
+        ctx->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 1);
     }
     else if(strcmp(interface, wl_shm_interface.name) == 0) {
-
-        lv_wayland_shm_set_interface(&app->shm_ctx, app->registry, name, interface, version);
-
+        /* Regardless of the backend, we always need SHM for the pointer cursor*/
+        ctx->wl_shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
     }
     else if(strcmp(interface, wl_seat_interface.name) == 0) {
-        app->wl_seat = wl_registry_bind(app->registry, name, &wl_seat_interface, 1);
-        wl_seat_add_listener(app->wl_seat, lv_wayland_seat_get_listener(), app);
+        lv_wayland_seat_init(&ctx->seat, registry, name, version);
     }
     else if(strcmp(interface, xdg_wm_base_interface.name) == 0) {
         /* supporting version 2 of the XDG protocol - ensures greater compatibility */
-        app->xdg_wm = wl_registry_bind(app->registry, name, &xdg_wm_base_interface, 2);
-        xdg_wm_base_add_listener(app->xdg_wm, lv_wayland_xdg_shell_get_wm_base_listener(), app);
+        ctx->xdg_wm = wl_registry_bind(ctx->registry, name, &xdg_wm_base_interface, 2);
+        xdg_wm_base_add_listener(ctx->xdg_wm, lv_wayland_xdg_shell_get_wm_base_listener(), ctx);
     }
     else if(strcmp(interface, wl_output_interface.name) == 0) {
-        if(app->wl_output_count < LV_WAYLAND_MAX_OUTPUTS) {
-            memset(&app->outputs[app->wl_output_count], 0, sizeof(struct output_info));
+        if(ctx->wl_output_count < LV_WAYLAND_MAX_OUTPUTS) {
+            memset(&ctx->outputs[ctx->wl_output_count], 0, sizeof(struct output_info));
             struct wl_output * out = wl_registry_bind(registry, name, &wl_output_interface, 1);
-            app->outputs[app->wl_output_count].wl_output = out;
-            wl_output_add_listener(out, &output_listener, &app->outputs[app->wl_output_count].wl_output);
-            app->wl_output_count++;
+            ctx->outputs[ctx->wl_output_count].wl_output = out;
+            wl_output_add_listener(out, &output_listener, &ctx->outputs[ctx->wl_output_count].wl_output);
+            ctx->wl_output_count++;
         }
     }
 #if LV_WAYLAND_USE_DMABUF
     else if(strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
-        lv_wayland_dmabuf_set_interface(&app->dmabuf_ctx, app->registry, name, interface, version);
-
-        wl_display_roundtrip(app->display);
+        lv_wayland_dmabuf_set_interface(&ctx->dmabuf_ctx, ctx->registry, name, interface, version);
+        wl_display_roundtrip(ctx->compositor_connection);
     }
 #endif
+    wl_backend_ops.global_handler(lv_wl_ctx.backend_data, registry, name, interface, version);
 }
 
 static void handle_global_remove(void * data, struct wl_registry * registry, uint32_t name)
@@ -394,11 +372,11 @@ void lv_wayland_read_input_events(void)
     int prepare_read = -1;
 
     while(prepare_read != 0) {
-        wl_display_dispatch_pending(lv_wl_ctx.display);
-        prepare_read = wl_display_prepare_read(lv_wl_ctx.display);
+        wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
+        prepare_read = wl_display_prepare_read(lv_wl_ctx.compositor_connection);
     }
-    wl_display_read_events(lv_wl_ctx.display);
-    wl_display_dispatch_pending(lv_wl_ctx.display);
+    wl_display_read_events(lv_wl_ctx.compositor_connection);
+    wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
 }
 
 void lv_wayland_update_window(struct window * window)
@@ -423,7 +401,7 @@ void lv_wayland_update_window(struct window * window)
         return;
     }
 
-    if(wl_display_flush(lv_wl_ctx.display) == -1) {
+    if(wl_display_flush(lv_wl_ctx.compositor_connection) == -1) {
         if(errno != EAGAIN) {
             LV_LOG_ERROR("failed to flush wayland display");
         }
@@ -436,4 +414,8 @@ void lv_wayland_update_window(struct window * window)
     }
 }
 
+struct wl_shm * lv_wayland_get_shm(void)
+{
+    return lv_wl_ctx.wl_shm;
+}
 #endif /* LV_USE_WAYLAND */

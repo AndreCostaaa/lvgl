@@ -82,43 +82,49 @@ enum object_type {
 #endif
 
 struct window;
-struct input {
-    struct {
-        uint32_t x;
-        uint32_t y;
-        lv_indev_state_t left_button;
-        lv_indev_state_t right_button;
-        lv_indev_state_t wheel_button;
-        int16_t wheel_diff;
-    } pointer;
 
-    struct {
-        lv_key_t key;
-        lv_indev_state_t state;
-    } keyboard;
+typedef struct {
+    struct graphic_object * current_pointed_obj;
+    struct wl_pointer * wl_pointer;
+    struct wl_surface * cursor_surface;
+    lv_point_t point;
+    lv_indev_state_t left_btn_state;
+    lv_indev_state_t right_btn_state;
+    lv_indev_state_t wheel_btn_state;
+    int16_t wheel_diff;
+} lv_wl_seat_pointer_t;
+
+typedef struct {
+    struct graphic_object * current_pointed_obj;
+    struct wl_touch * wl_touch;
 
 #if LV_USE_GESTURE_RECOGNITION
     lv_indev_touch_data_t touches[10];
     uint8_t touch_event_cnt;
     uint8_t primary_id;
 #else
-    struct {
-        lv_point_t point;
-        lv_indev_state_t state;
-    } touch;
-#endif
-};
+    lv_point_t point;
+    lv_indev_state_t state;
+#endif /*LV_USE_GESTURE_RECOGNITION*/
+} lv_wl_seat_touch_t;
 
-struct seat {
-    struct wl_touch * wl_touch;
-    struct wl_pointer * wl_pointer;
+typedef struct {
     struct wl_keyboard * wl_keyboard;
+    struct xkb_keymap * xkb_keymap;
+    struct xkb_state * xkb_state;
 
-    struct {
-        struct xkb_keymap * keymap;
-        struct xkb_state * state;
-    } xkb;
-};
+    lv_key_t key;
+    lv_indev_state_t state;
+} lv_wl_seat_keyboard_t;
+
+
+typedef struct {
+    struct wl_seat * wl_seat;
+
+    lv_wl_seat_pointer_t * pointer;
+    lv_wl_seat_touch_t * touch;
+    lv_wl_seat_keyboard_t * keyboard;
+} lv_wl_seat_t;
 
 struct graphic_object {
     struct window * window;
@@ -126,7 +132,6 @@ struct graphic_object {
     struct wl_subsurface * subsurface;
     smm_buffer_t * pending_buffer;
     smm_group_t * buffer_group;
-    struct input input;
     enum object_type type;
     int width;
     int height;
@@ -155,13 +160,13 @@ struct output_info {
 };
 
 struct lv_wayland_context {
-    struct wl_display * display;
+    struct wl_display * compositor_connection;
     struct wl_registry * registry;
     struct wl_compositor * compositor;
-    struct wl_subcompositor * subcompositor;
-    struct wl_seat * wl_seat;
-    struct wl_cursor_theme * cursor_theme;
-    struct wl_surface * cursor_surface;
+    struct wl_shm * wl_shm;
+    lv_wl_seat_t seat;
+
+    void * backend_data;
     shm_ctx_t shm_ctx;
     struct output_info outputs[LV_WAYLAND_MAX_OUTPUTS];
     uint8_t wl_output_count;
@@ -173,16 +178,9 @@ struct lv_wayland_context {
     struct xdg_wm_base * xdg_wm;
 
 #ifdef LV_WAYLAND_WINDOW_DECORATIONS
+    /* TODO: Move this to window*/
     bool opt_disable_decorations;
 #endif
-
-    struct xkb_context * xkb_context;
-
-    struct seat seat;
-
-    struct graphic_object * touch_obj;
-    struct graphic_object * pointer_obj;
-    struct graphic_object * keyboard_obj;
 
     lv_ll_t window_ll;
     lv_timer_t * cycle_timer;
@@ -321,15 +319,18 @@ lv_result_t lv_wayland_xdg_shell_create_window(struct lv_wayland_context * app, 
 void lv_wayland_xdg_shell_configure_surface(struct window * window);
 lv_result_t lv_wayland_xdg_shell_destroy_window_toplevel(struct window * window);
 lv_result_t lv_wayland_xdg_shell_destroy_window_surface(struct window * window);
-void lv_wayland_xdg_shell_handle_pointer_event(struct lv_wayland_context * app, uint32_t serial, uint32_t button,
-                                               uint32_t state);
 
-const char * lv_wayland_xdg_shell_get_cursor_name(const struct lv_wayland_context * app);
+void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat_pointer, uint32_t serial,
+                                               uint32_t button, uint32_t state);
+
+const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * seat_pointer);
 void lv_wayland_xdg_shell_deinit(void);
 
 /**********************
  *      SHM
  **********************/
+
+struct wl_shm * lv_wayland_get_shm(void);
 
 void lv_wayland_shm_set_interface(shm_ctx_t * context, struct wl_registry * registry, uint32_t name,
                                   const char * interface, uint32_t version);
@@ -379,18 +380,27 @@ struct buffer * dmabuf_acquire_pool_buffer(struct window * window, struct graphi
 const struct smm_events * lv_wayland_sme_get_events(void);
 
 /**********************
- *      Seat
- **********************/
-
-const struct wl_seat_listener * lv_wayland_seat_get_listener(void);
-
-/**********************
  *      Input
  **********************/
+
+void lv_wayland_seat_init(lv_wl_seat_t * seat, struct wl_registry * registry, uint32_t name, uint32_t version);
+void lv_wayland_seat_deinit(lv_wl_seat_t * seat);
 
 const struct wl_keyboard_listener * lv_wayland_keyboard_get_listener(void);
 const struct wl_pointer_listener * lv_wayland_pointer_get_listener(void);
 const struct wl_touch_listener * lv_wayland_touch_get_listener(void);
+
+lv_wl_seat_pointer_t * lv_wayland_seat_pointer_create(struct wl_seat * seat, struct wl_surface * surface);
+void lv_wayland_seat_pointer_delete(lv_wl_seat_pointer_t * seat_pointer);
+
+lv_wl_seat_touch_t * lv_wayland_seat_touch_create(struct wl_seat * seat);
+void lv_wayland_seat_touch_delete(lv_wl_seat_touch_t * seat_touch);
+
+lv_wl_seat_keyboard_t * lv_wayland_seat_keyboard_create(struct wl_seat * seat);
+void lv_wayland_seat_keyboard_delete(lv_wl_seat_keyboard_t * seat_keyboard);
+
+/* Updates indev's driver data with the given 'read_cb' to 'new_driver_data' */
+void lv_wayland_update_indevs(lv_indev_read_cb_t read_cb, void * new_driver_data);
 
 /**********************
  *      Cache
@@ -400,6 +410,8 @@ void lv_wayland_cache_add_area(struct window * window, smm_buffer_t * buf, const
 void lv_wayland_cache_clear(struct window * window);
 void lv_wayland_cache_apply_areas(struct window * window, void * dest, void * src, smm_buffer_t * src_buf);
 void lv_wayland_cache_purge(struct window * window, smm_buffer_t * buf);
+
+struct wl_surface * lv_wayland_get_drawing_surface(void);
 
 #endif /* LV_USE_WAYLAND */
 

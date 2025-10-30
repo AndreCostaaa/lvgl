@@ -139,9 +139,6 @@ lv_display_t * lv_wayland_window_create(uint32_t hor_res, uint32_t ver_res, char
 #if LV_WAYLAND_USE_DMABUF
     lv_wayland_dmabuf_set_draw_buffers(&lv_wl_ctx.dmabuf_ctx, window->lv_disp);
     lv_display_set_flush_cb(window->lv_disp, lv_wayland_dmabuf_flush_full_mode);
-#else
-    lv_wayland_shm_set_draw_buffers(&lv_wl_ctx.shm_ctx, window->lv_disp, window);
-    lv_display_set_flush_cb(window->lv_disp, lv_wayland_shm_flush_partial_mode);
 #endif
 
     lv_display_add_event_cb(window->lv_disp, res_changed_event, LV_EVENT_RESOLUTION_CHANGED, window);
@@ -343,11 +340,6 @@ lv_result_t lv_wayland_window_resize(struct window * window, int width, int heig
         if(err != LV_RESULT_OK) {
             return err;
         }
-#else
-        lv_result_t err = lv_wayland_shm_resize_window(&window->wl_ctx->shm_ctx, window, width, height);
-        if(err != LV_RESULT_OK) {
-            return err;
-        }
 #endif
     }
 
@@ -467,9 +459,8 @@ static void res_changed_event(lv_event_t * e)
 #if LV_WAYLAND_USE_DMABUF
     dmabuf_ctx_t * context = &window->wl_ctx->dmabuf_ctx;
     lv_wayland_dmabuf_resize_window(context, window, width, height);
-#else
-    lv_wayland_shm_resize_window(&window->wl_ctx->shm_ctx, window, width, height);
 #endif
+    wl_backend_ops.resize_display(lv_wl_ctx.backend_data, display);
 }
 
 static struct window * create_window(struct lv_wayland_context * app, int width, int height, const char * title)
