@@ -32,9 +32,9 @@ extern "C" {
 typedef void * (*lv_wayland_backend_init_t)(void);
 typedef void (*lv_wayland_backend_deinit_t)(void * backend_data);
 
-typedef lv_result_t (*lv_wayland_backend_init_display_t)(void * backend_data, lv_display_t * display, int32_t width,
-                                                         int32_t height);
-typedef lv_result_t (*lv_wayland_backend_resize_display_t)(void * backend_data, lv_display_t * display);
+typedef void * (*lv_wayland_backend_init_display_t)(void * backend_data, lv_display_t * display, int32_t width,
+                                                    int32_t height);
+typedef void * (*lv_wayland_backend_resize_display_t)(void * backend_data, lv_display_t * display);
 typedef void (*lv_wayland_backend_destroy_display_t)(void * backend_data, lv_display_t * display);
 
 typedef void (*lv_wayland_backend_global_handler_t)(void * backend_data, struct wl_registry * registry, uint32_t name,
@@ -50,6 +50,9 @@ typedef struct {
 } lv_wayland_backend_ops_t;
 
 extern const lv_wayland_backend_ops_t wl_backend_ops;
+
+void * lv_wayland_get_backend_display_data(lv_display_t * display);
+struct wl_surface * lv_wayland_get_window_surface(lv_display_t * display);
 
 /**********************
  * GLOBAL PROTOTYPES

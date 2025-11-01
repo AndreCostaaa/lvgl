@@ -21,7 +21,7 @@ extern "C" {
 #include <sys/poll.h>
 #include <wayland-client-protocol.h>
 #include <wayland_xdg_shell.h>
-#include "lv_wl_backend.h"
+#include "lv_wl_backend_private.h"
 
 #if LV_WAYLAND_USE_DMABUF
 #include <sys/mman.h>
@@ -34,11 +34,6 @@ extern "C" {
 
 #define LV_WAYLAND_DEFAULT_CURSOR_NAME "left_ptr"
 #define LV_WAYLAND_MAX_OUTPUTS 8
-
-#define LVGL_DRAW_BUFFER_DIV (8)
-#define DMG_CACHE_CAPACITY (32)
-#define TAG_LOCAL (0)
-#define TAG_BUFFER_DAMAGE (1)
 
 #if LV_WAYLAND_WINDOW_DECORATIONS
 #define TITLE_BAR_HEIGHT 24
@@ -60,7 +55,7 @@ extern "C" {
  *      TYPEDEFS
  **********************/
 
-enum object_type {
+typedef enum {
     OBJECT_TITLEBAR = 0,
     OBJECT_BUTTON_CLOSE,
     OBJECT_BUTTON_MAXIMIZE,
@@ -70,7 +65,16 @@ enum object_type {
     OBJECT_BORDER_LEFT,
     OBJECT_BORDER_RIGHT,
     OBJECT_WINDOW,
-};
+} lv_wl_surface_type_t;
+
+typedef struct graphic_object {
+    struct window * window;
+    struct wl_surface * wl_surface;
+    struct wl_subsurface * wl_subsurface;
+    lv_wl_surface_type_t type;
+    int width;
+    int height;
+} lv_wl_surface_t;
 
 #define FIRST_DECORATION (OBJECT_TITLEBAR)
 #define LAST_DECORATION (OBJECT_BORDER_RIGHT)
@@ -83,7 +87,7 @@ enum object_type {
 struct window;
 
 typedef struct {
-    struct graphic_object * current_pointed_obj;
+    lv_wl_surface_t * current_pointed_obj;
     struct wl_pointer * wl_pointer;
     struct wl_surface * cursor_surface;
     lv_point_t point;
@@ -125,14 +129,6 @@ typedef struct {
     lv_wl_seat_keyboard_t * keyboard;
 } lv_wl_seat_t;
 
-struct graphic_object {
-    struct window * window;
-    struct wl_surface * surface;
-    struct wl_subsurface * subsurface;
-    enum object_type type;
-    int width;
-    int height;
-};
 
 typedef struct {
     struct buffer * buffers;
@@ -186,17 +182,15 @@ struct lv_wayland_context {
     bool cursor_flush_pending;
 };
 
-struct window {
+
+typedef struct window {
     lv_display_t * lv_disp;
+    void * backend_display_data;
     lv_indev_t * lv_indev_pointer;
     lv_indev_t * lv_indev_pointeraxis;
     lv_indev_t * lv_indev_touch;
     lv_indev_t * lv_indev_keyboard;
-
-    lv_draw_buf_t * lv_draw_buf;
-
-    lv_wayland_display_close_f_t close_cb;
-    struct lv_wayland_context * wl_ctx;
+    lv_wayland_display_close_cb_t close_cb;
 
     /* The current physical assigned output */
     struct wl_output * assigned_output;
@@ -204,25 +198,15 @@ struct window {
     struct xdg_toplevel * xdg_toplevel;
     uint32_t wm_capabilities;
 
-    struct graphic_object * body;
-    struct {
-        lv_area_t cache[DMG_CACHE_CAPACITY];
-        unsigned char start;
-        unsigned char end;
-        unsigned size;
-    } dmg_cache;
+
+    lv_wl_surface_t * body;
 
 #if LV_WAYLAND_WINDOW_DECORATIONS
     struct graphic_object * decoration[NUM_DECORATIONS];
 #endif
-
-    int width;
-    int height;
-
+    int32_t resize_width;
+    int32_t resize_height;
     bool resize_pending;
-    int resize_width;
-    int resize_height;
-
     bool flush_pending;
     bool shall_close;
     bool closed;
@@ -241,7 +225,7 @@ struct window {
     struct buffer * decorators_buf[8];
 #endif
 #endif
-};
+} lv_wl_window_t;
 
 #if LV_WAYLAND_USE_DMABUF
 struct buffer {
@@ -279,11 +263,15 @@ void lv_wayland_wait_flush_cb(lv_display_t * disp);
 void lv_wayland_read_input_events(void);
 void lv_wayland_update_window(struct window * window);
 
+
 /**********************
  *      Window
  **********************/
 
 const struct wl_callback_listener * lv_wayland_window_get_wl_surface_frame_listener(void);
+
+int32_t lv_wayland_window_get_width(lv_wl_window_t * window);
+int32_t lv_wayland_window_get_height(lv_wl_window_t * window);
 
 void lv_wayland_window_draw(struct window * window, uint32_t width, uint32_t height);
 lv_result_t lv_wayland_window_resize(struct window * window, int width, int height);
@@ -322,29 +310,6 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
 
 const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * seat_pointer);
 void lv_wayland_xdg_shell_deinit(void);
-
-/**********************
- *      SHM
- **********************/
-
-struct wl_shm * lv_wayland_get_shm(void);
-
-void lv_wayland_shm_set_interface(shm_ctx_t * context, struct wl_registry * registry, uint32_t name,
-                                  const char * interface, uint32_t version);
-
-struct graphic_object * lv_wayland_shm_on_graphical_object_creation(shm_ctx_t * context, struct graphic_object * obj);
-void lv_wayland_shm_on_graphical_object_destruction(shm_ctx_t * context, struct graphic_object * obj);
-lv_result_t lv_wayland_shm_set_draw_buffers(shm_ctx_t * context, lv_display_t * display, struct window * window);
-lv_result_t lv_wayland_shm_create_draw_buffers(shm_ctx_t * context, struct window * window);
-lv_result_t lv_wayland_shm_resize_window(shm_ctx_t * context, struct window * window, int32_t width, int32_t height);
-lv_result_t lv_wayland_shm_is_ready(shm_ctx_t * context);
-
-void lv_wayland_shm_delete_draw_buffers(shm_ctx_t * context, struct window * window);
-void lv_wayland_shm_initalize_context(shm_ctx_t * context);
-void lv_wayland_shm_deinit(shm_ctx_t * context);
-void lv_wayland_shm_flush_partial_mode(lv_display_t * disp, const lv_area_t * area, unsigned char * color_p);
-
-struct wl_cursor_theme * lv_wayland_shm_load_cursor_theme(shm_ctx_t * context);
 
 /**********************
  *      DMABUF

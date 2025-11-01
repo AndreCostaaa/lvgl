@@ -7,7 +7,6 @@
  *********************/
 
 #include "lv_wayland_private.h"
-#include <src/drivers/wayland/lv_wl_backend.h>
 
 #if LV_USE_WAYLAND
 
@@ -162,7 +161,7 @@ void lv_wayland_init(void)
 #if LV_WAYLAND_USE_DMABUF
     lv_wayland_dmabuf_initalize_context(&lv_wl_ctx.dmabuf_ctx);
 #endif
-    wl_backend_ops.init();
+    lv_wl_ctx.backend_data = wl_backend_ops.init();
 
     /* Add registry listener and wait for registry reception */
     lv_wl_ctx.registry = wl_display_get_registry(lv_wl_ctx.compositor_connection);
@@ -172,13 +171,6 @@ void lv_wayland_init(void)
 
     LV_ASSERT_MSG(lv_wl_ctx.compositor, "Wayland compositor not available");
     if(lv_wl_ctx.compositor == NULL) {
-        return;
-    }
-
-    bool shm_ready = lv_wayland_shm_is_ready(&lv_wl_ctx.shm_ctx);
-    LV_ASSERT_MSG(shm_ready, "Couldn't initialize wayland SHM");
-    if(!shm_ready) {
-        LV_LOG_ERROR("Couldn't initialize wayland SHM");
         return;
     }
 
@@ -367,14 +359,43 @@ static void handle_global_remove(void * data, struct wl_registry * registry, uin
 
 void lv_wayland_read_input_events(void)
 {
-    int prepare_read = -1;
+    wl_display_flush(lv_wl_ctx.compositor_connection);
+    while(wl_display_dispatch_pending(lv_wl_ctx.compositor_connection) > 0) ;
 
-    while(prepare_read != 0) {
-        wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
-        prepare_read = wl_display_prepare_read(lv_wl_ctx.compositor_connection);
-    }
-    wl_display_read_events(lv_wl_ctx.compositor_connection);
-    wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
+    // // First, dispatch any events that are already queued
+    // while(wl_display_dispatch_pending(lv_wl_ctx.compositor_connection) > 0) {
+    //     // Keep dispatching until queue is empty
+    // }
+    //
+    // // Now prepare to read new events from the socket
+    // while(wl_display_prepare_read(lv_wl_ctx.compositor_connection) != 0) {
+    //     // If prepare_read fails, it means events arrived while we were preparing
+    //     // Dispatch them and try again
+    //     wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
+    // }
+    //
+    // // Read new events from the compositor
+    // wl_display_read_events(lv_wl_ctx.compositor_connection);
+    //
+    // // Dispatch the events we just read
+    // wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
+    // int prepare_read = -1;
+    // wl_display_dispatch(lv_wl_ctx.compositor_connection);
+    // while(wl_display_dispatch_pending(lv_wl_ctx.compositor_connection) > 0) {
+    //     LV_LOG_USER("Pending");
+    // }
+    // while(wl_display_prepare_read(lv_wl_ctx.compositor_connection) != 0) {
+    // }
+    // wl_display_read_events(lv_wl_ctx.compositor_connection);
+    // wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
+    //
+    // LV_LOG_USER("Prepare read");
+    // while(prepare_read != 0) {
+    //     wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
+    //     prepare_read = wl_display_prepare_read(lv_wl_ctx.compositor_connection);
+    // }
+    // wl_display_read_events(lv_wl_ctx.compositor_connection);
+    // wl_display_dispatch_pending(lv_wl_ctx.compositor_connection);
 }
 
 void lv_wayland_update_window(struct window * window)

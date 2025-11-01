@@ -34,7 +34,8 @@
 
 static void update_indevs(lv_wl_seat_pointer_t * driver_data);
 
-static void pointer_read(lv_indev_t * drv, lv_indev_data_t * data);
+static void pointer_read(lv_indev_t * indev, lv_indev_data_t * data);
+static void pointeraxis_read(lv_indev_t * indev, lv_indev_data_t * data);
 
 static void pointer_handle_enter(void * data, struct wl_pointer * pointer, uint32_t serial, struct wl_surface * surface,
                                  wl_fixed_t sx, wl_fixed_t sy);
@@ -94,6 +95,24 @@ lv_indev_t * lv_wayland_get_pointer(lv_display_t * disp)
     return window->lv_indev_pointer;
 }
 
+lv_indev_t * lv_wayland_pointer_axis_create(void)
+{
+    lv_indev_t * indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_ENCODER);
+    lv_indev_set_read_cb(indev, pointeraxis_read);
+    lv_indev_set_driver_data(indev, lv_wl_ctx.seat.pointer);
+    return indev;
+}
+
+lv_indev_t * lv_wayland_get_pointeraxis(lv_display_t * display)
+{
+    struct window * window = lv_display_get_driver_data(display);
+    if(!window) {
+        return NULL;
+    }
+    return window->lv_indev_pointeraxis;
+}
+
 lv_wl_seat_pointer_t * lv_wayland_seat_pointer_create(struct wl_seat * seat, struct wl_surface * surface)
 {
     LV_ASSERT_NULL(seat);
@@ -119,7 +138,8 @@ lv_wl_seat_pointer_t * lv_wayland_seat_pointer_create(struct wl_seat * seat, str
 
     wl_seat_pointer->cursor_surface = surface;
     wl_seat_pointer->wl_pointer = pointer;
-    update_indevs(wl_seat_pointer);
+    lv_wayland_update_indevs(pointer_read, wl_seat_pointer);
+    lv_wayland_update_indevs(pointeraxis_read, wl_seat_pointer);
 
     return wl_seat_pointer;
 }
@@ -154,6 +174,17 @@ static void update_indevs(lv_wl_seat_pointer_t * driver_data)
     }
 }
 
+static void pointeraxis_read(lv_indev_t * indev, lv_indev_data_t * data)
+{
+    lv_wl_seat_pointer_t * seat_pointer = lv_indev_get_driver_data(indev);
+    if(!seat_pointer) {
+        return;
+    }
+
+    data->state = seat_pointer->wheel_btn_state;
+    data->enc_diff = seat_pointer->wheel_diff;
+    seat_pointer->wheel_diff = 0;
+}
 static void pointer_read(lv_indev_t * indev, lv_indev_data_t * data)
 {
     lv_wl_seat_pointer_t * seat_pointer = lv_indev_get_driver_data(indev);

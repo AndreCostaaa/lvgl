@@ -153,9 +153,9 @@ lv_result_t lv_wayland_xdg_shell_create_window(struct lv_wayland_context * app, 
         return LV_RESULT_INVALID;
     }
 
-    window->xdg_surface = xdg_wm_base_get_xdg_surface(app->xdg_wm, window->body->surface);
+    window->xdg_surface = xdg_wm_base_get_xdg_surface(app->xdg_wm, window->body->wl_surface);
     if(!window->xdg_surface) {
-        LV_LOG_ERROR("cannot create XDG surface");
+        LV_LOG_ERROR("Failed to create XDG surface");
         return LV_RESULT_INVALID;
     }
 
@@ -164,7 +164,7 @@ lv_result_t lv_wayland_xdg_shell_create_window(struct lv_wayland_context * app, 
     window->xdg_toplevel = xdg_surface_get_toplevel(window->xdg_surface);
     if(!window->xdg_toplevel) {
         xdg_surface_destroy(window->xdg_surface);
-        LV_LOG_ERROR("cannot get XDG toplevel surface");
+        LV_LOG_ERROR("Failed to acquire XDG toplevel surface");
         return LV_RESULT_INVALID;
     }
 
@@ -181,7 +181,7 @@ void lv_wayland_xdg_shell_configure_surface(struct window * window)
     // An (XDG) surface commit (without an attached buffer) triggers this
     // configure event
     window->is_window_configured = false;
-    wl_surface_commit(window->body->surface);
+    wl_surface_commit(window->body->wl_surface);
     wl_display_roundtrip(lv_wl_ctx.compositor_connection);
     LV_ASSERT_MSG(window->is_window_configured, "Failed to receive the xdg_surface configuration event");
 }
@@ -214,7 +214,10 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
                                                uint32_t button,
                                                uint32_t state)
 {
-    struct window * window = seat_pointer->current_pointed_obj->window;
+    lv_wl_window_t * window = seat_pointer->current_pointed_obj->window;
+    int32_t window_height = lv_wayland_window_get_height(window);
+    int32_t window_width = lv_wayland_window_get_width(window);
+
     int pos_x = seat_pointer->point.x;
     int pos_y = seat_pointer->point.y;
 
@@ -249,7 +252,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
                     if(pos_x < (BORDER_SIZE * 5)) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
                     }
-                    else if(pos_x >= (window->width + BORDER_SIZE - (BORDER_SIZE * 5))) {
+                    else if(pos_x >= (lv_wayland_window_get_width(window) + BORDER_SIZE - (BORDER_SIZE * 5))) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
                     }
                     else {
@@ -267,7 +270,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
                     if(pos_x < (BORDER_SIZE * 5)) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
                     }
-                    else if(pos_x >= (window->width + BORDER_SIZE - (BORDER_SIZE * 5))) {
+                    else if(pos_x >= (window_width + BORDER_SIZE - (BORDER_SIZE * 5))) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
                     }
                     else {
@@ -285,7 +288,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
                     if(pos_y < (BORDER_SIZE * 5)) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT;
                     }
-                    else if(pos_y >= (window->height + BORDER_SIZE - (BORDER_SIZE * 5))) {
+                    else if(pos_y >= (window_height + BORDER_SIZE - (BORDER_SIZE * 5))) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT;
                     }
                     else {
@@ -303,7 +306,7 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
                     if(pos_y < (BORDER_SIZE * 5)) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT;
                     }
-                    else if(pos_y >= (window->height + BORDER_SIZE - (BORDER_SIZE * 5))) {
+                    else if(pos_y >= (lv_wayland_window_get_height(window) + BORDER_SIZE - (BORDER_SIZE * 5))) {
                         edge = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT;
                     }
                     else {
@@ -324,13 +327,15 @@ void lv_wayland_xdg_shell_handle_pointer_event(const lv_wl_seat_pointer_t * seat
 const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * seat_pointer)
 {
 
-    if(!seat_pointer->current_pointed_obj->window->xdg_toplevel || lv_wl_ctx.opt_disable_decorations) {
+    if(!LV_WAYLAND_WINDOW_DECORATIONS || !seat_pointer->current_pointed_obj || lv_wl_ctx.opt_disable_decorations) {
         return LV_WAYLAND_DEFAULT_CURSOR_NAME;
     }
     int pos_x = seat_pointer->point.x;
     int pos_y = seat_pointer->point.y;
 
     struct window * window = seat_pointer->current_pointed_obj->window;
+    int32_t window_height = lv_wayland_window_get_height(window);
+    int32_t window_width = lv_wayland_window_get_width(window);
 
     switch(seat_pointer->current_pointed_obj->type) {
         case OBJECT_BORDER_TOP:
@@ -340,7 +345,7 @@ const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * s
             else if(pos_x < (BORDER_SIZE * 5)) {
                 return "top_left_corner";
             }
-            else if(pos_x >= (window->width + BORDER_SIZE - (BORDER_SIZE * 5))) {
+            else if(pos_x >= (window_width + BORDER_SIZE - (BORDER_SIZE * 5))) {
                 return "top_right_corner";
             }
             else {
@@ -354,7 +359,7 @@ const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * s
             else if(pos_x < (BORDER_SIZE * 5)) {
                 return "bottom_left_corner";
             }
-            else if(pos_x >= (window->width + BORDER_SIZE - (BORDER_SIZE * 5))) {
+            else if(pos_x >= (window_width + BORDER_SIZE - (BORDER_SIZE * 5))) {
                 return "bottom_right_corner";
             }
             else {
@@ -368,7 +373,7 @@ const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * s
             else if(pos_y < (BORDER_SIZE * 5)) {
                 return "top_left_corner";
             }
-            else if(pos_y >= (window->height + BORDER_SIZE - (BORDER_SIZE * 5))) {
+            else if(pos_y >= (window_height + BORDER_SIZE - (BORDER_SIZE * 5))) {
                 return "bottom_left_corner";
             }
             else {
@@ -382,7 +387,7 @@ const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * s
             else if(pos_y < (BORDER_SIZE * 5)) {
                 return "top_right_corner";
             }
-            else if(pos_y >= (window->height + BORDER_SIZE - (BORDER_SIZE * 5))) {
+            else if(pos_y >= (window_height + BORDER_SIZE - (BORDER_SIZE * 5))) {
                 return "bottom_right_corner";
             }
             else {
@@ -402,43 +407,22 @@ const char * lv_wayland_xdg_shell_get_cursor_name(const lv_wl_seat_pointer_t * s
 
 static void xdg_surface_handle_configure(void * data, struct xdg_surface * xdg_surface, uint32_t serial)
 {
-    struct window * window = (struct window *)data;
+    lv_wl_window_t * window = (lv_wl_window_t *)data;
 
-#if LV_WAYLAND_USE_DMABUF
-    LV_LOG_TRACE("XDG surface configure: serial=%u, dmabuf_resize_pending=%d",
-                 serial, window->dmabuf_resize_pending);
-
-    /* Store the configure serial for synchronization */
-    window->configure_serial = serial;
-    window->surface_configured = true;
-    window->configure_acknowledged = false;
-
-    /* Only acknowledge immediately if no DMABUF resize is pending */
-    if(!window->dmabuf_resize_pending) {
-        xdg_surface_ack_configure(xdg_surface, serial);
-        window->configure_acknowledged = true;
-        LV_LOG_TRACE("XDG surface configure acknowledged immediately");
-    }
-    else {
-        LV_LOG_TRACE("XDG surface configure deferred - DMABUF resize pending");
-    }
-#else
     xdg_surface_ack_configure(xdg_surface, serial);
-#endif
     if(!window->is_window_configured) {
         /* This branch is executed at launch */
         if(!window->resize_pending) {
             /* Use the size passed to the create_window function */
-            lv_wayland_window_draw(window, window->width, window->height);
+            lv_wayland_window_resize(window, lv_wayland_window_get_width(window),
+                                     lv_wayland_window_get_height(window));
         }
         else {
 
             /* Handle early maximization or fullscreen, */
             /* by using the size communicated by the compositor */
             /* when the initial xdg configure event arrives  */
-            lv_wayland_window_draw(window, window->resize_width, window->resize_height);
-            window->width          = window->resize_width;
-            window->height         = window->resize_height;
+            lv_wayland_window_resize(window, window->resize_width, window->resize_height);
             window->resize_pending = false;
         }
     }
@@ -453,16 +437,23 @@ static void xdg_toplevel_handle_configure(void * data, struct xdg_toplevel * xdg
     LV_UNUSED(xdg_toplevel);
     LV_UNUSED(states);
 
-    LV_LOG_TRACE("XDG toplevel configure: w=%d h=%d (current: %dx%d)",
-                 width, height, window->width, window->height);
-    LV_LOG_TRACE("current body w:%d h:%d", window->body->width, window->body->height);
+    LV_LOG_USER("XDG toplevel configure: w=%d h=%d (current: %dx%d)",
+                width, height, lv_wayland_window_get_width(window), lv_wayland_window_get_height(window));
+    LV_LOG_USER("current body w:%d h:%d", window->body->width, window->body->height);
 
-    if((width <= 0) || (height <= 0)) {
-        LV_LOG_TRACE("will not resize to w:%d h:%d", width, height);
+    if((width < 0) || (height < 0)) {
+        LV_LOG_USER("will not resize to w:%d h:%d", width, height);
         return;
     }
 
-    if((width != window->width) || (height != window->height)) {
+    if(width == 0 && height == 0) {
+        window->resize_pending = true;
+        window->resize_width   = lv_wayland_window_get_width(window);
+        window->resize_height  = lv_wayland_window_get_height(window);
+        return;
+    }
+
+    if((width != lv_wayland_window_get_width(window)) || (height != lv_wayland_window_get_height(window))) {
         window->resize_width   = width;
         window->resize_height  = height;
         window->resize_pending = true;
@@ -471,7 +462,7 @@ static void xdg_toplevel_handle_configure(void * data, struct xdg_toplevel * xdg
 #endif
     }
     else {
-        LV_LOG_TRACE("resize_pending not set w:%d h:%d", width, height);
+        LV_LOG_USER("resize_pending not set w:%d h:%d", width, height);
     }
 }
 
