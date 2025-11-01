@@ -210,10 +210,9 @@ static void flush_wait_cb(lv_display_t * disp)
 {
     lv_wl_shm_display_data_t * ddata = lv_wayland_get_backend_display_data(disp);
     while(ddata->flushing) {
-        LV_LOG_USER("Dispatching");
         wl_display_dispatch(lv_wl_ctx.compositor_connection);
     }
-
+    lv_display_flush_ready(disp);
 }
 
 static void * shm_init_display(void * backend_data, lv_display_t * display, int32_t width, int32_t height)
@@ -234,11 +233,11 @@ static void * shm_init_display(void * backend_data, lv_display_t * display, int3
 
     if(LV_WAYLAND_BUF_COUNT == 1) {
         lv_display_set_buffers(display, ddata->mmap_ptr, NULL, buf_size,
-                               LV_DISPLAY_RENDER_MODE_DIRECT);
+                               LV_WAYLAND_RENDER_MODE);
     }
     else {
         lv_display_set_buffers(display, ddata->mmap_ptr, (uint8_t *)ddata->mmap_ptr + buf_size,
-                               buf_size, LV_DISPLAY_RENDER_MODE_DIRECT);
+                               buf_size, LV_WAYLAND_RENDER_MODE);
     }
     lv_display_set_flush_cb(display, shm_flush_cb);
     lv_display_set_flush_wait_cb(display, flush_wait_cb);

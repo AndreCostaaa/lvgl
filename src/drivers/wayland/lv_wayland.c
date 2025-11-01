@@ -27,10 +27,6 @@
         #error "Invalid LV_WAYLAND_BUF_COUNT. Expected either 1 or 2"
     #endif
 
-    #if !LV_WAYLAND_USE_DMABUF && LV_WAYLAND_BUF_COUNT != 1
-        #error "Wayland doesn't support more than 1 LV_WAYLAND_BUF_COUNT without DMABUF"
-    #endif
-
     #if LV_WAYLAND_USE_DMABUF && LV_WAYLAND_BUF_COUNT != 2
         #error "Wayland with DMABUF only supports 2 LV_WAYLAND_BUF_COUNT"
     #endif
@@ -49,10 +45,6 @@
 
 #if LV_WAYLAND_USE_DMABUF && LV_WAYLAND_RENDER_MODE == LV_DISPLAY_RENDER_MODE_PARTIAL
     #error "LV_WAYLAND_USE_DMABUF doesn't support LV_DISPLAY_RENDER_MODE_PARTIAL"
-#endif
-
-#if !LV_WAYLAND_USE_DMABUF && LV_WAYLAND_RENDER_MODE != LV_DISPLAY_RENDER_MODE_PARTIAL
-    #error "Wayland without DMABUF only supports LV_DISPLAY_RENDER_MODE_PARTIAL"
 #endif
 
 #if (LV_COLOR_DEPTH == 8 || LV_COLOR_DEPTH == 1)
