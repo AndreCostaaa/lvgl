@@ -82,8 +82,6 @@
     #include <wayland_linux_dmabuf.h>
 #endif
 
-#include "lvgl.h"
-
 /*********************
  *      DEFINES
  *********************/

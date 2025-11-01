@@ -18,7 +18,6 @@ extern "C" {
 #if LV_USE_WAYLAND
 
 
-#include "lv_wayland_smm.h"
 #include <sys/poll.h>
 #include <wayland-client-protocol.h>
 #include <wayland_xdg_shell.h>
@@ -130,8 +129,6 @@ struct graphic_object {
     struct window * window;
     struct wl_surface * surface;
     struct wl_subsurface * subsurface;
-    smm_buffer_t * pending_buffer;
-    smm_group_t * buffer_group;
     enum object_type type;
     int width;
     int height;
@@ -401,17 +398,6 @@ void lv_wayland_seat_keyboard_delete(lv_wl_seat_keyboard_t * seat_keyboard);
 
 /* Updates indev's driver data with the given 'read_cb' to 'new_driver_data' */
 void lv_wayland_update_indevs(lv_indev_read_cb_t read_cb, void * new_driver_data);
-
-/**********************
- *      Cache
- **********************/
-
-void lv_wayland_cache_add_area(struct window * window, smm_buffer_t * buf, const lv_area_t * area);
-void lv_wayland_cache_clear(struct window * window);
-void lv_wayland_cache_apply_areas(struct window * window, void * dest, void * src, smm_buffer_t * src_buf);
-void lv_wayland_cache_purge(struct window * window, smm_buffer_t * buf);
-
-struct wl_surface * lv_wayland_get_drawing_surface(void);
 
 #endif /* LV_USE_WAYLAND */
 
