@@ -26,9 +26,12 @@ extern "C" {
 #else
 /* For now, by default we add glew and glfw.
    In the future we need to consider adding a config for setting these includes*/
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
+#include "glad/include/glad/gl.h"
 #endif /*LV_USE_EGL*/
+
+#if LV_USE_GLFW
+#include <GLFW/glfw3.h>
+#endif
 
 /*********************
  *      DEFINES
