@@ -15,6 +15,7 @@ extern "C" {
  *********************/
 
 #include "../../lv_conf_internal.h"
+
 #if LV_USE_OPENGLES
 
 #include "../../misc/lv_area.h"
@@ -24,8 +25,6 @@ extern "C" {
 #include "glad/include/glad/gles2.h"
 #include "glad/include/glad/egl.h"
 #else
-/* For now, by default we add glew and glfw.
-   In the future we need to consider adding a config for setting these includes*/
 #include "glad/include/glad/gl.h"
 #endif /*LV_USE_EGL*/
 
