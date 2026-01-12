@@ -362,7 +362,9 @@ static size_t wl_egl_select_config_cb(void * driver_data, const lv_egl_config_t 
         if(configs[i].max_width >= target_w &&
            configs[i].max_height >= target_h &&
            config_cf == target_cf &&
-           configs[i].surface_type & EGL_WINDOW_BIT) {
+           configs[i].surface_type & EGL_WINDOW_BIT &&
+           configs[i].stencil == 8
+          ) {
             LV_LOG_TRACE("Choosing config %zu", i);
             return i;
         }
