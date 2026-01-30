@@ -296,8 +296,10 @@ static void image_free_cb(image_item_t * item, void * user_data)
     LV_UNUSED(user_data);
     LV_PROFILER_DRAW_BEGIN;
     LV_LOG_TRACE("image_handle: %d", item->image_handle);
-    nvgDeleteImage(item->u->vg, item->image_handle);
-    item->image_handle = -1;
+    if(item->image_handle) {
+        nvgDeleteImage(item->u->vg, item->image_handle);
+        item->image_handle = 0;
+    }
 
     if(item->src_type == LV_IMAGE_SRC_FILE) {
         lv_free((void *)item->src);
