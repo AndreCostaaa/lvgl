@@ -251,6 +251,107 @@ Here's how to create a basic glTF viewer and load a model:
     }
 
 
+Sharing Models Across Multiple Viewers
+---------------------------------------
+
+Models can be loaded once and shared across multiple glTF viewer objects, reducing memory usage and improving performance when displaying the same 3D content in different contexts.
+
+Basic Model Sharing
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+
+    /* Load a model once */
+    lv_gltf_model_t * model = lv_gltf_data_load_from_file("A:model.glb", NULL);
+    
+    /* Create multiple viewers and add the same model to each */
+    lv_obj_t * gltf1 = lv_gltf_create(lv_screen_active());
+    lv_gltf_add_model(gltf1, model);
+    
+    lv_obj_t * gltf2 = lv_gltf_create(lv_screen_active());
+    lv_gltf_add_model(gltf2, model);
+    
+    /* Both viewers now display the same model data */
+
+
+Sharing Textures with Model Loader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When loading multiple models that may share common textures, use a model loader to automatically deduplicate texture data:
+
+.. code-block:: c
+
+    /* Create a model loader for texture sharing */
+    lv_gltf_model_loader_t * loader = lv_gltf_model_loader_create();
+    
+    /* Load models - textures with identical content are shared automatically */
+    lv_gltf_model_t * model1 = lv_gltf_data_load_from_file("A:car.glb", loader);
+    lv_gltf_model_t * model2 = lv_gltf_data_load_from_file("A:truck.glb", loader);
+    
+    /* Create viewers */
+    lv_obj_t * gltf1 = lv_gltf_create(lv_screen_active());
+    lv_gltf_add_model(gltf1, model1);
+    
+    lv_obj_t * gltf2 = lv_gltf_create(lv_screen_active());
+    lv_gltf_add_model(gltf2, model2);
+    
+    /* Loader can be deleted after models are loaded */
+    lv_gltf_model_loader_delete(loader);
+
+
+Loading from Byte Arrays
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Models can also be loaded from memory buffers, useful when embedding model data directly in your application:
+
+.. code-block:: c
+
+    /* Load from byte array */
+    extern const uint8_t model_data[];
+    extern const size_t model_data_size;
+    
+    lv_gltf_model_t * model = lv_gltf_data_load_from_bytes(model_data, 
+                                                           model_data_size, 
+                                                           NULL);
+    
+    lv_obj_t * gltf = lv_gltf_create(lv_screen_active());
+    lv_gltf_add_model(gltf, model);
+
+
+Shared Node Manipulation
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When a model is shared across multiple viewers, modifications to node properties (position, rotation, scale) are reflected in all viewers displaying that model:
+
+.. code-block:: c
+
+    /* Get a node from the shared model */
+    lv_gltf_model_node_t * node = lv_gltf_model_node_get_by_index(model, 0);
+    
+    /* Modify the node - changes appear in both gltf1 and gltf2 */
+    lv_gltf_model_node_set_position_x(node, 2.0f);
+
+
+Memory Management
+~~~~~~~~~~~~~~~~~
+
+When sharing models, you are responsible for the lifetime of the model object. Delete the model only after all glTF viewers using it have been deleted:
+
+.. code-block:: c
+
+    /* Delete viewers first */
+    lv_obj_delete(gltf1);
+    lv_obj_delete(gltf2);
+    
+    /* Then delete the shared model */
+    lv_gltf_model_delete(model);
+
+.. important::
+
+    - Models must outlive all glTF viewers that use them
+    - The model loader is only needed during model loading and can be deleted immediately after
+    - Shared textures remain valid as long as any model using them exists
+
 Camera Controls
 ---------------
 
