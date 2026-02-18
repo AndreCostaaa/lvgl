@@ -4,7 +4,7 @@
 
 #include "../../lv_opengles_private.h"
 
-#if LV_USE_EGL
+#if 0 && LV_USE_EGL
 
 #include <stdio.h>
 #include <stdlib.h>

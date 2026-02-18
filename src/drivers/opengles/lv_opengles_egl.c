@@ -16,7 +16,6 @@
 #include <string.h>
 #include "lv_opengles_debug.h"
 
-#include "glad/include/glad/egl.h"
 #include "../../misc/lv_assert.h"
 #include "../../misc/lv_log.h"
 #include "../../misc/lv_types.h"
@@ -47,7 +46,7 @@ static lv_result_t lv_egl_config_from_egl_config(lv_opengles_egl_t * ctx, lv_egl
                                                  EGLConfig egl_config);
 static void * create_native_window(lv_opengles_egl_t * ctx);
 static lv_result_t get_native_config(lv_opengles_egl_t * ctx, EGLint * native_id, uint64_t ** mods, size_t * count);
-static GLADapiproc glad_egl_load_cb(void * userdata, const char * name);
+// static GLADapiproc glad_egl_load_cb(void * userdata, const char * name);
 
 /**********************
 *  STATIC VARIABLES
@@ -164,33 +163,50 @@ static void * load_gl_lib(void)
 
 static lv_result_t load_egl(lv_opengles_egl_t * ctx)
 {
+#ifndef __EMSCRIPTEN__
     ctx->egl_lib_handle = load_egl_lib();
     if(!ctx->egl_lib_handle) {
         LV_LOG_ERROR("Failed to load egl shared lib: %s", dlerror());
         goto err;
     }
+#endif /*__EMSCRIPTEN__*/
 
+    LV_LOG_USER("Creating egl display");
+
+#ifdef __EMSCRIPTEN__
+    // lv_opengles_egl_emscripten_load_functions(&eglGetProcAddress, &eglGetDisplay, &eglGetCurrentDisplay, &eglQueryString,
+    //                                           &eglGetError);
+    //
+    ctx->egl_display = lv_opengles_egl_create_emscripten_egl_display(ctx);
+#else
     ctx->egl_display = create_egl_display(ctx);
+#endif
     if(!ctx->egl_display) {
         LV_LOG_ERROR("Failed to create egl display");
         goto egl_display_err;
     }
+    //
+    // #ifdef __EMSCRIPTEN__
+    //     if(!gladLoadEGLUserPtr(ctx->egl_display, glad_egl_load_cb, ctx->egl_lib_handle)) {
+    // #else
+    //     if(!gladLoadEGLUserPtr(ctx->egl_display, glad_egl_load_cb, ctx->egl_lib_handle)) {
+    // #endif
+    //         LV_LOG_ERROR("Failed to load EGL entry points");
+    //         goto load_egl_functions_err;
+    //     }
 
-    if(!gladLoadEGLUserPtr(ctx->egl_display, glad_egl_load_cb, ctx->egl_lib_handle)) {
-        LV_LOG_ERROR("Failed to load EGL entry points");
-        goto load_egl_functions_err;
-    }
+    // if(eglBindAPI && !eglBindAPI(EGL_OPENGL_ES_API)) {
+    //     LV_LOG_ERROR("Failed to bind api");
+    //     goto err;
+    // }
 
-    if(eglBindAPI && !eglBindAPI(EGL_OPENGL_ES_API)) {
-        LV_LOG_ERROR("Failed to bind api");
-        goto err;
-    }
-
+#ifndef __EMSCRIPTEN__
     ctx->opengl_lib_handle = load_gl_lib();
     if(!ctx->opengl_lib_handle) {
         LV_LOG_ERROR("Failed to load OpenGL library. %s", dlerror());
         goto opengl_lib_err;
     }
+#endif
 
     ctx->egl_config = create_egl_config(ctx);
     if(!ctx->egl_config) {
@@ -199,11 +215,11 @@ static lv_result_t load_egl(lv_opengles_egl_t * ctx)
     }
 
     ctx->native_window = (EGLNativeWindowType)create_native_window(ctx);
-    if(!ctx->native_window) {
-        LV_LOG_ERROR("Failed to create native window");
-        goto create_window_err;
-
-    }
+    // if(!ctx->native_window) {
+    //     LV_LOG_ERROR("Failed to create native window");
+    //     goto create_window_err;
+    //
+    // }
     ctx->egl_surface = create_egl_surface(ctx);
     if(!ctx->egl_surface) {
         LV_LOG_ERROR("Failed to create EGL surface. Error code: %#x", eglGetError());
@@ -225,10 +241,10 @@ static lv_result_t load_egl(lv_opengles_egl_t * ctx)
         LV_LOG_WARN("Can't set egl swap interval");
     }
 
-    if(!gladLoadGLES2UserPtr(glad_egl_load_cb, ctx->opengl_lib_handle)) {
-        LV_LOG_ERROR("Failed to load load OpenGL entry points");
-        goto load_opengl_functions_err;
-    }
+    // if(!gladLoadGLES2UserPtr(glad_egl_load_cb, ctx->opengl_lib_handle)) {
+    //     LV_LOG_ERROR("Failed to load load OpenGL entry points");
+    //     goto load_opengl_functions_err;
+    // }
 
     return LV_RESULT_OK;
 
@@ -245,129 +261,148 @@ egl_surface_err:
 create_window_err:
     ctx->egl_config = NULL;
 egl_config_err:
-    dlclose(ctx->opengl_lib_handle);
-    ctx->opengl_lib_handle = NULL;
+    if(ctx->opengl_lib_handle) {
+        dlclose(ctx->opengl_lib_handle);
+        ctx->opengl_lib_handle = NULL;
+    }
 opengl_lib_err:
     ctx->egl_display = NULL;
 load_egl_functions_err:
 egl_display_err:
-    dlclose(ctx->egl_lib_handle);
-    ctx->egl_lib_handle = NULL;
+    if(ctx->egl_lib_handle) {
+        dlclose(ctx->egl_lib_handle);
+        ctx->egl_lib_handle = NULL;
+    }
 err:
     return LV_RESULT_INVALID;
 }
 
-static EGLDisplay create_egl_display(lv_opengles_egl_t * ctx)
-{
-    union {
-        PFNEGLQUERYSTRINGPROC fn;
-        void * ptr;
-    } egl_query_string;
+// static EGLDisplay create_egl_display(lv_opengles_egl_t * ctx)
+// {
+//     union {
+//         PFNEGLQUERYSTRINGPROC fn;
+//         void * ptr;
+//     } egl_query_string;
+//
+//     union {
+//         PFNEGLGETPROCADDRESSPROC fn;
+//         void * ptr;
+//     } egl_get_proc_address;
+//
+//     union {
+//         PFNEGLGETERRORPROC fn;
+//         void * ptr;
+//     } egl_get_error;
+//
+//     union {
+//         PFNEGLGETDISPLAYPROC fn;
+//         void * ptr;
+//     } egl_get_display;
+//
+//     union {
+//         PFNEGLINITIALIZEPROC fn;
+//         void * ptr;
+//     } egl_initialize;
+//
+//     EGLDisplay display = NULL;
+//
+//     egl_get_proc_address.ptr = dlsym(ctx->egl_lib_handle, "eglGetProcAddress");
+//     if(!egl_get_proc_address.ptr) {
+//         LV_LOG_ERROR("Failed to load eglGetProcAddress");
+//         return NULL;
+//     }
+//
+//     egl_query_string.ptr = dlsym(ctx->egl_lib_handle, "eglQueryString");
+//     if(!egl_query_string.ptr) {
+//         LV_LOG_ERROR("Failed to load eglQueryString");
+//         return NULL;
+//     }
+//
+//     egl_get_display.ptr = dlsym(ctx->egl_lib_handle, "eglGetDisplay");
+//     if(!egl_get_display.ptr) {
+//         LV_LOG_ERROR("Failed to load eglGetDisplay");
+//         return NULL;
+//     }
+//
+//     egl_get_error.ptr = dlsym(ctx->egl_lib_handle, "eglGetError");
+//     if(!egl_get_error.ptr) {
+//         LV_LOG_ERROR("Failed to load eglGetError");
+//         return NULL;
+//     }
+//
+//     egl_initialize.ptr = dlsym(ctx->egl_lib_handle, "eglInitialize");
+//     if(!egl_initialize.ptr) {
+//         LV_LOG_ERROR("Failed to load eglInitialize");
+//         return NULL;
+//     }
+//
+//     char const * supported_extensions = egl_query_string.fn(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+//
+//     bool has_platform_display_ext_support = ctx->interface.egl_platform != 0 && supported_extensions &&
+//                                             strstr(supported_extensions, "EGL_EXT_platform_base");
+//     if(has_platform_display_ext_support) {
+//         PFNEGLGETPLATFORMDISPLAYEXTPROC egl_get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
+//                                                                    egl_get_proc_address.fn("eglGetPlatformDisplayEXT");
+//         if(egl_get_platform_display) {
+//             display = egl_get_platform_display(ctx->interface.egl_platform, (void *)ctx->interface.native_display, NULL);
+//         }
+//         if(!display) {
+//             LV_LOG_WARN("Failed to get egl display from eglGetPlatformDisplay. Error code: %#x", egl_get_error.fn());
+//         }
+//     }
+//
+//     if(!display) {
+//         LV_LOG_INFO("Falling back to eglGetDisplay()");
+//         display = egl_get_display.fn(ctx->interface.native_display);
+//     }
+//
+//     if(!display) {
+//         LV_LOG_ERROR("Failed to get egl display from eglGetDisplay. Error code: %#x", egl_get_error.fn());
+//         return NULL;
+//     }
+//
+//     EGLint egl_major;
+//     EGLint egl_minor;
+//     if(!egl_initialize.fn(display, &egl_major, &egl_minor)) {
+//         LV_LOG_ERROR("Failed to initialize egl. Error code: %#x", egl_get_error.fn());
+//         return NULL;
+//     }
+//     LV_LOG_INFO("Egl version %d.%d", egl_major, egl_minor);
+//
+//     return display;
+// }
 
-    union {
-        PFNEGLGETPROCADDRESSPROC fn;
-        void * ptr;
-    } egl_get_proc_address;
-
-    union {
-        PFNEGLGETERRORPROC fn;
-        void * ptr;
-    } egl_get_error;
-
-    union {
-        PFNEGLGETDISPLAYPROC fn;
-        void * ptr;
-    } egl_get_display;
-
-    union {
-        PFNEGLINITIALIZEPROC fn;
-        void * ptr;
-    } egl_initialize;
-
-    EGLDisplay display = NULL;
-
-    egl_get_proc_address.ptr = dlsym(ctx->egl_lib_handle, "eglGetProcAddress");
-    if(!egl_get_proc_address.ptr) {
-        LV_LOG_ERROR("Failed to load eglGetProcAddress");
-        return NULL;
-    }
-
-    egl_query_string.ptr = dlsym(ctx->egl_lib_handle, "eglQueryString");
-    if(!egl_query_string.ptr) {
-        LV_LOG_ERROR("Failed to load eglQueryString");
-        return NULL;
-    }
-
-    egl_get_display.ptr = dlsym(ctx->egl_lib_handle, "eglGetDisplay");
-    if(!egl_get_display.ptr) {
-        LV_LOG_ERROR("Failed to load eglGetDisplay");
-        return NULL;
-    }
-
-    egl_get_error.ptr = dlsym(ctx->egl_lib_handle, "eglGetError");
-    if(!egl_get_error.ptr) {
-        LV_LOG_ERROR("Failed to load eglGetError");
-        return NULL;
-    }
-
-    egl_initialize.ptr = dlsym(ctx->egl_lib_handle, "eglInitialize");
-    if(!egl_initialize.ptr) {
-        LV_LOG_ERROR("Failed to load eglInitialize");
-        return NULL;
-    }
-
-    char const * supported_extensions = egl_query_string.fn(EGL_NO_DISPLAY, EGL_EXTENSIONS);
-
-    bool has_platform_display_ext_support = ctx->interface.egl_platform != 0 && supported_extensions &&
-                                            strstr(supported_extensions, "EGL_EXT_platform_base");
-    if(has_platform_display_ext_support) {
-        PFNEGLGETPLATFORMDISPLAYEXTPROC egl_get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
-                                                                   egl_get_proc_address.fn("eglGetPlatformDisplayEXT");
-        if(egl_get_platform_display) {
-            display = egl_get_platform_display(ctx->interface.egl_platform, (void *)ctx->interface.native_display, NULL);
-        }
-        if(!display) {
-            LV_LOG_WARN("Failed to get egl display from eglGetPlatformDisplay. Error code: %#x", egl_get_error.fn());
-        }
-    }
-
-    if(!display) {
-        LV_LOG_INFO("Falling back to eglGetDisplay()");
-        display = egl_get_display.fn(ctx->interface.native_display);
-    }
-
-    if(!display) {
-        LV_LOG_ERROR("Failed to get egl display from eglGetDisplay. Error code: %#x", egl_get_error.fn());
-        return NULL;
-    }
-
-    EGLint egl_major;
-    EGLint egl_minor;
-    if(!egl_initialize.fn(display, &egl_major, &egl_minor)) {
-        LV_LOG_ERROR("Failed to initialize egl. Error code: %#x", egl_get_error.fn());
-        return NULL;
-    }
-    LV_LOG_INFO("Egl version %d.%d", egl_major, egl_minor);
-
-    return display;
-}
-
-static GLADapiproc glad_egl_load_cb(void * userdata, const char * name)
-{
-    union {
-        GLADapiproc fn;
-        void * ptr;
-    } result;
-
-    if(eglGetProcAddress) {
-        GLADapiproc sym = (GLADapiproc)eglGetProcAddress(name);
-        if(sym) {
-            return sym;
-        }
-    }
-    result.ptr = dlsym(userdata, name);
-    return result.fn;
-}
+// #ifdef __EMSCRIPTEN__
+// extern void * emscripten_GetProcAddress(const char * name_);
+// static GLADapiproc glad_egl_load_cb(void * userdata, const char * name)
+// {
+//     void * addr = dlsym(RTLD_DEFAULT, name);
+//     if(!addr) {
+//         LV_LOG_USER("Failed to load %s: %s", name, dlerror());
+//     }
+//     else {
+//         LV_LOG_USER("Loaded %s at %p", name, addr);
+//     }
+//     return (GLADapiproc)addr;
+// }
+// #else
+// static GLADapiproc glad_egl_load_cb(void * userdata, const char * name)
+// {
+//     union {
+//         GLADapiproc fn;
+//         void * ptr;
+//     } result;
+//
+//     if(eglGetProcAddress) {
+//         GLADapiproc sym = (GLADapiproc)eglGetProcAddress(name);
+//         if(sym) {
+//             return sym;
+//         }
+//     }
+//     result.ptr = dlsym(userdata, name);
+//     return result.fn;
+// }
+// #endif
 
 static EGLConfig create_egl_config(lv_opengles_egl_t * ctx)
 {
@@ -441,7 +476,7 @@ static EGLSurface create_egl_surface(lv_opengles_egl_t * ctx)
 {
     LV_ASSERT_NULL(ctx->egl_display);
     LV_ASSERT_NULL(ctx->egl_config);
-    LV_ASSERT(ctx->native_window != 0);
+    // LV_ASSERT(ctx->native_window != 0);
     return eglCreateWindowSurface(ctx->egl_display, ctx->egl_config, ctx->native_window, NULL);
 }
 
@@ -536,26 +571,26 @@ static lv_result_t get_native_config(lv_opengles_egl_t * ctx, EGLint * native_id
         return LV_RESULT_INVALID;
     }
     return LV_RESULT_OK;
-
-    if(!eglQueryDmaBufModifiersEXT || !eglQueryDmaBufModifiersEXT(ctx->egl_display, *native_id, 0, NULL, NULL, &num_mods)) {
-        LV_LOG_WARN("Failed to get native modifiers");
-        return LV_RESULT_OK;
-    }
-
-    if(num_mods <= 0) {
-        LV_LOG_INFO("No native modifiers");
-        return LV_RESULT_OK;
-    }
-
-    *mods = lv_malloc(num_mods * sizeof(*mods));
-    LV_ASSERT_MALLOC(mods);
-    eglQueryDmaBufModifiersEXT(ctx->egl_display, *native_id, num_mods, *mods, NULL, &num_mods);
-    if(*mods[0] == 0) {
-        lv_free(mods);
-        return LV_RESULT_OK;
-    }
-    *count = (size_t) num_mods;
-    return LV_RESULT_OK;
+    //
+    // if(!eglQueryDmaBufModifiersEXT || !eglQueryDmaBufModifiersEXT(ctx->egl_display, *native_id, 0, NULL, NULL, &num_mods)) {
+    //     LV_LOG_WARN("Failed to get native modifiers");
+    //     return LV_RESULT_OK;
+    // }
+    //
+    // if(num_mods <= 0) {
+    //     LV_LOG_INFO("No native modifiers");
+    //     return LV_RESULT_OK;
+    // }
+    //
+    // *mods = lv_malloc(num_mods * sizeof(*mods));
+    // LV_ASSERT_MALLOC(mods);
+    // eglQueryDmaBufModifiersEXT(ctx->egl_display, *native_id, num_mods, *mods, NULL, &num_mods);
+    // if(*mods[0] == 0) {
+    //     lv_free(mods);
+    //     return LV_RESULT_OK;
+    // }
+    // *count = (size_t) num_mods;
+    // return LV_RESULT_OK;
 }
 
 #endif /*LV_USE_EGL*/

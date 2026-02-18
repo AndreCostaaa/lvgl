@@ -3,7 +3,7 @@
  */
 
 #include "../../lv_opengles_private.h"
-#if LV_USE_EGL
+#if 0 && LV_USE_EGL
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -313,6 +313,7 @@ int gladLoadEGLUserPtr(EGLDisplay display, GLADuserptrloadfunc load, void* userp
     eglGetError = (PFNEGLGETERRORPROC) load(userptr, "eglGetError");
     if (eglGetDisplay == NULL || eglGetCurrentDisplay == NULL || eglQueryString == NULL || eglGetError == NULL) return 0;
 
+	LV_LOG_USER("functiosn loaded correctly");
     version = glad_egl_find_core_egl(display);
     if (!version) return 0;
     glad_egl_load_EGL_VERSION_1_0(load, userptr);

@@ -21,12 +21,17 @@ extern "C" {
 #include "../../misc/lv_area.h"
 #include "../../misc/lv_color.h"
 
-#if LV_USE_EGL
-#include "glad/include/glad/gles2.h"
-#include "glad/include/glad/egl.h"
-#else
-#include "glad/include/glad/gl.h"
-#endif /*LV_USE_EGL*/
+#define GL_GLEXT_PROTOTYPES
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include <GLES2/gl2platform.h>
+// #if LV_USE_EGL
+// #include "glad/include/glad/gles2.h"
+// #include "glad/include/glad/egl.h"
+// #else
+// #include "glad/include/glad/gl.h"
+// #endif /*LV_USE_EGL*/
 
 #if LV_USE_GLFW
 #include <GLFW/glfw3.h>
@@ -50,13 +55,14 @@ extern "C" {
 #define GL_UNPACK_ROW_LENGTH GL_UNPACK_ROW_LENGTH_EXT
 #endif /*GL_UNPACK_ROW_LENGTH*/
 
-#ifndef glGenVertexArrays
-#define glGenVertexArrays glGenVertexArraysOES
-#endif
 
 #ifndef glBindVertexArray
 #define glBindVertexArray glBindVertexArrayOES
 #endif
+#ifndef glGenVertexArrays
+#define glGenVertexArrays glGenVertexArraysOES
+#endif
+
 
 #ifndef glDeleteVertexArrays
 #define glDeleteVertexArrays glDeleteVertexArraysOES
@@ -65,6 +71,7 @@ extern "C" {
 #ifndef glTexStorage2D
 #define glTexStorage2D glTexStorage2DEXT
 #endif
+
 
 #ifndef GL_RGBA32F
 #define GL_RGBA32F 0x8814

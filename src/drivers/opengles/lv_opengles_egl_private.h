@@ -19,7 +19,9 @@ extern "C" {
 
 #include "../../misc/lv_types.h"
 #include "../../misc/lv_color.h"
+#ifndef __gles2_gl2_h_
 #include "lv_opengles_private.h"
+#endif /*__gles2_gl2_h_*/
 #include "lv_opengles_egl.h"
 
 
@@ -90,6 +92,18 @@ struct _lv_opengles_egl {
 /**********************
  * GLOBAL PROTOTYPES
  **********************/
+
+#ifdef __EMSCRIPTEN__
+EGLDisplay lv_opengles_egl_create_emscripten_egl_display(lv_opengles_egl_t * ctx);
+
+void lv_opengles_egl_emscripten_load_functions(
+    PFNEGLGETPROCADDRESSPROC * egl_get_proc_address,
+    PFNEGLGETDISPLAYPROC * egl_get_display,
+    PFNEGLGETCURRENTDISPLAYPROC * egl_get_current_display,
+    PFNEGLQUERYSTRINGPROC * egl_query_string,
+    PFNEGLGETERRORPROC * egl_get_error
+);
+#endif
 
 /**********************
  *      MACROS

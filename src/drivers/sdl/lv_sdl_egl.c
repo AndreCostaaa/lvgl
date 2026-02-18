@@ -77,7 +77,9 @@ static lv_result_t init_display(lv_display_t * display)
         LV_LOG_WARN("Failed to allocate memory for display data");
         return LV_RESULT_INVALID;
     }
+    LV_LOG_INFO("Creating egl context");
     ddata->egl_ctx = lv_opengles_egl_context_create(&ifc);
+    LV_LOG_INFO("egl ctx created? %p", ddata->egl_ctx);
     if(!ddata->egl_ctx) {
         LV_LOG_ERROR("Failed to initialize EGL context");
         lv_free(ddata);
@@ -212,9 +214,10 @@ static size_t select_config_cb(void * driver_data, const lv_egl_config_t * confi
 #error "Unsupported color format"
 #endif
 
+return 0;
 
     for(size_t i = 0; i < config_count; ++i) {
-        LV_LOG_TRACE("Got config %zu %#x %dx%d %d %d %d %d buffer size %d depth %d  samples %d stencil %d surface type %d renderable type %d",
+        LV_LOG_INFO("Got config %zu %#x %dx%d %d %d %d %d buffer size %d depth %d  samples %d stencil %d surface type %d renderable type %d",
                      i, configs[i].id,
                      configs[i].max_width, configs[i].max_height, configs[i].r_bits, configs[i].g_bits, configs[i].b_bits, configs[i].a_bits,
                      configs[i].buffer_size, configs[i].depth, configs[i].samples, configs[i].stencil,
@@ -225,8 +228,9 @@ static size_t select_config_cb(void * driver_data, const lv_egl_config_t * confi
         lv_color_format_t config_cf = lv_opengles_egl_color_format_from_egl_config(&configs[i]);
         const bool resolution_matches = configs[i].max_width >= target_w &&
                                         configs[i].max_height >= target_h;
-        const bool is_nanovg_compatible = (configs[i].renderable_type & EGL_OPENGL_ES2_BIT) != 0 &&
-                                          configs[i].stencil == 8 && configs[i].samples == 4;
+        const bool is_nanovg_compatible = true;
+		// (configs[i].renderable_type & EGL_OPENGL_ES2_BIT) != 0 &&
+		//                                         configs[i].stencil == 8 && configs[i].samples == 4;
         const bool is_window = (configs[i].surface_type & EGL_WINDOW_BIT) != 0;
         const bool is_compatible_with_draw_unit = is_nanovg_compatible || !LV_USE_DRAW_NANOVG;
 
