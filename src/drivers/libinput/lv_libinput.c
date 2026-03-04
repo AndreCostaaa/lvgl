@@ -251,6 +251,7 @@ static bool _rescan_devices(void)
             perror("could not allocate memory for device node path");
             libinput_unref(context);
             _reset_scanned_devices();
+            closedir(dir);
             return false;
         }
         strcpy(path, "/dev/input/");
@@ -280,11 +281,13 @@ static bool _rescan_devices(void)
             free(path);
             libinput_unref(context);
             _reset_scanned_devices();
+            closedir(dir);
             return false;
         }
     }
 
     libinput_unref(context);
+    closedir(dir);
     return true;
 }
 
