@@ -296,6 +296,11 @@ if(CONFIG_LV_BUILD_DEMOS)
 
 endif()
 
+if(LV_BUILD_TESTS)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
+
 ############################## INSTALLATION ######################################
 
 # Library and headers can be installed to system using make install
