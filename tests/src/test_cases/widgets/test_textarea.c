@@ -88,6 +88,10 @@ void test_textarea_should_not_scroll_if_text_is_fully_visible(void)
     lv_textarea_set_text(textarea, "Type here...");
     lv_obj_set_width(textarea, 100);
     lv_obj_center(textarea);
+    for(size_t i = 0; i < 1000; ++i) {
+        lv_tick_inc(1);
+        lv_timer_handler();
+    }
     TEST_ASSERT_EQUAL_SCREENSHOT("widgets/textarea_1.png");
 }
 
