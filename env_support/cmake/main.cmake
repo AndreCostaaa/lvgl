@@ -23,6 +23,8 @@ option(LV_BUILD_LVGL_H_SYSTEM_INCLUDE
 
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
+option(LV_BUILD_TESTS "Build tests" OFF)
+
 # These control how LVGL resolves its optional dependencies.
 # All three strategies are tried in order: find_package -> pkg-config -> FetchContent.
 # Individual dependencies can be further controlled with LV_USE_FIND_PACKAGE_<DEP>,

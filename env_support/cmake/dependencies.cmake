@@ -103,3 +103,9 @@ if(CONFIG_LV_USE_DEMO_FLEX_LAYOUT
    OR CONFIG_LV_USE_DEMO_SMARTWATCH)
   include(${CMAKE_CURRENT_LIST_DIR}/dependencies/lv_demos_ext.cmake)
 endif()
+
+# ====== Development Dependencies ====== #
+if(LV_BUILD_TESTS)
+  include(${CMAKE_CURRENT_LIST_DIR}/dependencies/unity.cmake)
+  include(${CMAKE_CURRENT_LIST_DIR}/test-helper.cmake)
+endif()
