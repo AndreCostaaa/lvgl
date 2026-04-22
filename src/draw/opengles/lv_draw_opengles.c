@@ -240,6 +240,7 @@ static int32_t evaluate(lv_draw_unit_t * draw_unit, lv_draw_task_t * task)
         case LV_DRAW_TASK_TYPE_LINE:
         case LV_DRAW_TASK_TYPE_TRIANGLE:
         case LV_DRAW_TASK_TYPE_LAYER:
+        case LV_DRAW_TASK_TYPE_BLUR:
 #if LV_USE_3DTEXTURE
         case LV_DRAW_TASK_TYPE_3D:
 #endif
@@ -393,6 +394,13 @@ static unsigned int draw_to_texture(lv_draw_opengles_unit_t * u, cache_data_t * 
                 lv_memcpy(&image_dsc, task->draw_dsc, sizeof(image_dsc));
                 image_dsc.base.user_data = (void *)(uintptr_t)1;
                 lv_draw_image(&dest_layer, &image_dsc, &task->area);
+            }
+            break;
+        case LV_DRAW_TASK_TYPE_BLUR: {
+                lv_draw_blur_dsc_t blur_dsc;
+                lv_memcpy(&blur_dsc, task->draw_dsc, sizeof(blur_dsc));
+                blur_dsc.base.user_data = (void *)(uintptr_t)1;
+                lv_draw_blur(&dest_layer, &blur_dsc, &task->area);
             }
             break;
         default:
