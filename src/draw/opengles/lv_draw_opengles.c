@@ -403,6 +403,13 @@ static unsigned int draw_to_texture(lv_draw_opengles_unit_t * u, cache_data_t * 
                 lv_draw_image(&dest_layer, &image_dsc, &task->area);
             }
             break;
+        case LV_DRAW_TASK_TYPE_BLUR: {
+                lv_draw_blur_dsc_t blur_dsc;
+                lv_memcpy(&blur_dsc, task->draw_dsc, sizeof(blur_dsc));
+                blur_dsc.base.user_data = (void *)(uintptr_t)1;
+                lv_draw_blur(&dest_layer, &blur_dsc, &task->area);
+            }
+            break;
         default:
             /*The malloced cache_data->draw_dsc will be freed automatically on failure
             *in opengles_texture_cache_free_cb*/
