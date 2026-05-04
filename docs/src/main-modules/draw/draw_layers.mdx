@@ -130,27 +130,28 @@ in each case:
    
     The current layer can be read from the `base` draw descriptor.  For example:
    
-    .. code-block:: c
-   
-        /* In LV_EVENT_DRAW_TASK_ADDED */
-        lv_draw_task_t * t = lv_event_get_draw_task(e);
-        lv_draw_base_dsc_t * draw_dsc = lv_draw_task_get_draw_dsc(t);
-   
-        lv_layer_t * current_layer = draw_dsc.layer;
+```c
+/* In LV_EVENT_DRAW_TASK_ADDED */
+lv_draw_task_t * t = lv_event_get_draw_task(e);
+lv_draw_base_dsc_t * draw_dsc = lv_draw_task_get_draw_dsc(t);
+
+lv_layer_t * current_layer = draw_dsc.layer;
+```
+
 3. **Draw to the Canvas Widget**:
     The canvas itself doesn't store a layer, but one can be easily created and used
     like this:
-   
-    .. code-block:: c
-   
-        /* Initialize a layer */
-        lv_layer_t layer;
-        lv_canvas_init_layer(canvas, &layer);
-   
-        /* Draw something here */
-   
-        /* Wait until the rendering is ready */
-        lv_canvas_finish_layer(canvas, &layer);
+
+```c
+/* Initialize a layer */
+lv_layer_t layer;
+lv_canvas_init_layer(canvas, &layer);
+
+/* Draw something here */
+
+/* Wait until the rendering is ready */
+lv_canvas_finish_layer(canvas, &layer);
+```
 
 ## Creating a New Layer
 
