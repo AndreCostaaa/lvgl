@@ -72,6 +72,9 @@ file(GLOB_RECURSE DEMO_SOURCES ${LVGL_ROOT_DIR}/demos/*.c)
 file(GLOB_RECURSE THORVG_SOURCES ${LVGL_ROOT_DIR}/src/libs/thorvg/*.cpp
                                  ${LVGL_ROOT_DIR}/src/others/vg_lite_tvg/*.cpp)
 
+# Remove the ThorVG sources from the main sources
+list(REMOVE_ITEM SOURCES ${THORVG_SOURCES})
+
 # Check for the case where LVGL is distributed with only its source code
 if(NOT EXAMPLE_SOURCES AND CONFIG_LV_BUILD_EXAMPLES)
     message(STATUS "No Examples found. Disabling Examples build")
