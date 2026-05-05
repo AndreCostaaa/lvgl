@@ -83,6 +83,10 @@ fout.write(
 #define LV_NANOVG_BACKEND_GLES2     3
 #define LV_NANOVG_BACKEND_GLES3     4
 
+#define LV_CHECK_ARG_LOG_MODE_NONE    0
+#define LV_CHECK_ARG_LOG_MODE_MINIMAL 1
+#define LV_CHECK_ARG_LOG_MODE_VERBOSE 2
+
 /** Handle special Kconfig options. */
 #ifndef LV_KCONFIG_IGNORE
     #include "lv_conf_kconfig.h"
@@ -338,6 +342,10 @@ LV_EXPORT_CONST_INT(LV_DRAW_BUF_ALIGN);
         #define _CRT_SECURE_NO_WARNINGS
     #endif
 #endif  /*defined(LV_CONF_SKIP)*/
+
+#ifndef LV_CHECK_ARG_LOG_MODE
+    #define LV_CHECK_ARG_LOG_MODE   0
+#endif
 
 #endif  /*LV_CONF_INTERNAL_H*/
 '''
