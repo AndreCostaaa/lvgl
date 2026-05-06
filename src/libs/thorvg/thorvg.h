@@ -17,7 +17,6 @@
 #include <memory>
 #include <string>
 #include <list>
-#include "../../lvgl_public.h"
 
 #ifdef TVG_API
     #undef TVG_API
