@@ -44,11 +44,13 @@ static lv_indev_t * get_indev(const lv_group_t * g);
 void lv_group_init(void)
 {
     lv_ll_init(group_ll_p, sizeof(lv_group_t));
+    default_group = NULL;
 }
 
 void lv_group_deinit(void)
 {
     lv_ll_clear(group_ll_p);
+    default_group = NULL;
 }
 
 lv_group_t * lv_group_create(void)
