@@ -41,6 +41,7 @@ typedef struct {
 static void lv_gstreamer_constructor(const lv_obj_class_t * class_p, lv_obj_t * obj);
 static void lv_gstreamer_destructor(const lv_obj_class_t * class_p, lv_obj_t * obj);
 static void on_decode_pad_added(GstElement * element, GstPad * pad, gpointer user_data);
+static void on_qtdemux_pad_added(GstElement * qtdemux, GstPad * pad, gpointer user_data);
 static GstFlowReturn on_new_sample(GstElement * sink, gpointer user_data);
 static void gstreamer_timer_cb(lv_timer_t * timer);
 static lv_result_t gstreamer_poll_bus(lv_gstreamer_t * streamer);
@@ -100,6 +101,25 @@ lv_obj_t * lv_gstreamer_create(lv_obj_t * parent)
     LV_TRACE_OBJ_CREATE("end");
     return obj;
 }
+static void on_element_added(GstBin * bin, GstElement * element, gpointer user_data)
+{
+    LV_UNUSED(bin);
+    LV_UNUSED(user_data);
+
+    GstElementFactory * factory = gst_element_get_factory(element);
+    if(factory) {
+        const gchar * name = gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory));
+        if(g_str_has_prefix(name, "v4l2") && g_str_has_suffix(name, "dec")) {
+            LV_LOG_INFO("Setting capture-io-mode=4 on %s to disable DMABuf output", name);
+            g_object_set(G_OBJECT(element), "capture-io-mode", 4, NULL);
+        }
+    }
+
+    /* Recurse into nested bins (uridecodebin contains decodebin contains the decoder) */
+    if(GST_IS_BIN(element)) {
+        g_signal_connect(element, "element-added", G_CALLBACK(on_element_added), NULL);
+    }
+}
 
 lv_result_t lv_gstreamer_set_src(lv_obj_t * obj, const char * factory_name, const char * property, const char * source)
 {
@@ -117,28 +137,94 @@ lv_result_t lv_gstreamer_set_src(lv_obj_t * obj, const char * factory_name, cons
         LV_LOG_WARN("LVGL doesn't allow modifying the GStreamer source. Create a new widget with a new src instead");
         return LV_RESULT_INVALID;
     }
+
     GstElement * pipeline = gst_pipeline_new("lv_gstreamer_pipeline");
     if(!pipeline) {
         LV_LOG_ERROR("Failed to create gstreamer pipeline");
         return LV_RESULT_INVALID;
     }
 
+    if(lv_streq(LV_GSTREAMER_FACTORY_FILE, factory_name)) {
+        /* File: build explicit pipeline to force capture-io-mode=4 on v4l2 decoder.
+         * uridecodebin outputs DMA_DRM/YU12 DMABuf which nothing downstream can convert. */
+        GstElement * filesrc   = gst_element_factory_make("filesrc",     "lv_gstreamer_source");
+        GstElement * qtdemux   = gst_element_factory_make("qtdemux",     "lv_gstreamer_qtdemux");
+        GstElement * video_q   = gst_element_factory_make("queue",       "lv_gstreamer_video_demux_queue");
+        GstElement * h264parse = gst_element_factory_make("h264parse",   "lv_gstreamer_h264parse");
+        GstElement * v4l2dec   = gst_element_factory_make("v4l2h264dec", "lv_gstreamer_v4l2dec");
+        GstElement * audio_q   = gst_element_factory_make("queue",       "lv_gstreamer_audio_demux_queue");
+
+        /* video sink chain */
+        GstElement * video_convert;
+        GstElement * video_rate;
+        GstElement * video_queue;
+        GstElement * video_app_sink;
+        video_convert   = gst_element_factory_make("videoconvert", "lv_gstreamer_video_convert");
+        video_rate      = gst_element_factory_make("videorate",    "lv_gstreamer_video_rate");
+        video_queue     = gst_element_factory_make("queue",        "lv_gstreamer_video_queue");
+        video_app_sink  = gst_element_factory_make("appsink",      "lv_gstreamer_video_sink");
+
+        if(!filesrc || !qtdemux || !video_q || !h264parse || !v4l2dec || !audio_q ||
+           !video_convert || !video_rate || !video_queue || !video_app_sink) {
+            LV_LOG_ERROR("Failed to create file pipeline elements");
+            gst_object_unref(pipeline);
+            return LV_RESULT_INVALID;
+        }
+
+        g_object_set(G_OBJECT(filesrc), "location", source, NULL);
+        g_object_set(G_OBJECT(v4l2dec), "capture-io-mode", 4, NULL);
+
+        uint32_t target_fps = 1000 / LV_DEF_REFR_PERIOD;
+        char caps_str[128];
+        lv_snprintf(caps_str, sizeof(caps_str), "video/x-raw,format=%s,framerate=%" LV_PRIu32 "/1", GST_FORMAT, target_fps);
+        GstCaps * appsink_caps = gst_caps_from_string(caps_str);
+        g_object_set(G_OBJECT(video_app_sink), "emit-signals", TRUE, "sync", TRUE,
+                     "max-buffers", 1, "drop", TRUE, "caps", appsink_caps, NULL);
+        gst_caps_unref(appsink_caps);
+
+        gst_bin_add_many(GST_BIN(pipeline), filesrc, qtdemux, video_q, h264parse, v4l2dec,
+                         video_convert, video_rate, video_queue, video_app_sink, audio_q, NULL);
+
+        /* filesrc → qtdemux */
+        if(!gst_element_link(filesrc, qtdemux)) {
+            LV_LOG_ERROR("Failed to link filesrc to qtdemux");
+            gst_object_unref(pipeline);
+            return LV_RESULT_INVALID;
+        }
+
+        /* video static chain: video_q → h264parse → v4l2dec → videoconvert → videorate → video_queue → appsink */
+        if(!gst_element_link_many(video_q, h264parse, v4l2dec, video_convert, video_rate, video_queue, video_app_sink, NULL)) {
+            LV_LOG_ERROR("Failed to link video chain");
+            gst_object_unref(pipeline);
+            return LV_RESULT_INVALID;
+        }
+
+        streamer->video_convert = video_convert;
+        g_signal_connect(video_app_sink, "new-sample", G_CALLBACK(on_new_sample), streamer);
+
+        /* qtdemux dynamic pads → queues, audio chain built in callback */
+        g_object_set_data(G_OBJECT(pipeline), "video-queue", video_q);
+        g_object_set_data(G_OBJECT(pipeline), "audio-queue", audio_q);
+        g_signal_connect(qtdemux, "pad-added", G_CALLBACK(on_qtdemux_pad_added), streamer);
+
+        streamer->pipeline = pipeline;
+        return LV_RESULT_OK;
+    }
+
+    /* All other sources: create head element and proceed as before */
     GstElement * head = gst_element_factory_make(factory_name, "lv_gstreamer_source");
     if(!head) {
         gst_object_unref(pipeline);
         LV_LOG_ERROR("Failed to create source from factory '%s'", factory_name);
         return LV_RESULT_INVALID;
     }
-
     if(!gst_bin_add(GST_BIN(pipeline), head)) {
         gst_object_unref(head);
         gst_object_unref(pipeline);
         LV_LOG_ERROR("Failed to add source element to pipeline");
         return LV_RESULT_INVALID;
     }
-
     if(property != NULL && source != NULL) {
-        /* LV_GSTREAMER_PROPERTY_WEBRTCSRC is a child-proxy property path */
         if(lv_streq(property, LV_GSTREAMER_PROPERTY_WEBRTCSRC)) {
             if(!gstreamer_set_child_proxy_string(head, property, source)) {
                 gst_object_unref(pipeline);
@@ -150,11 +236,7 @@ lv_result_t lv_gstreamer_set_src(lv_obj_t * obj, const char * factory_name, cons
             g_object_set(G_OBJECT(head), property, source, NULL);
         }
     }
-
-    /* The uri decode source element will automatically handle parsing and decoding for us
-     * for other source types, we need to add a parser and a decoder ourselves element*/
     if(!lv_streq(LV_GSTREAMER_FACTORY_URI_DECODE, factory_name)) {
-        /* webrtcsrc plugins require its own handling to be able to connect on the first available video stream */
         if(lv_streq(LV_GSTREAMER_FACTORY_WEBRTCSRC, factory_name)) {
             LV_LOG_INFO("Setting up webrtc pipeline");
             if(gstreamer_element_has_property(head, "connect-to-first-producer")) {
@@ -177,7 +259,6 @@ lv_result_t lv_gstreamer_set_src(lv_obj_t * obj, const char * factory_name, cons
                 LV_LOG_ERROR("Failed to add decodebin element to pipeline");
                 return LV_RESULT_INVALID;
             }
-
             if(!gst_element_link(head, decodebin)) {
                 gst_object_unref(pipeline);
                 LV_LOG_ERROR("Failed to link source with parsebin elements");
@@ -186,13 +267,7 @@ lv_result_t lv_gstreamer_set_src(lv_obj_t * obj, const char * factory_name, cons
             head = decodebin;
         }
     }
-
-    /* At this point we don't yet know the input format
-     * Once the source starts receiving the data, it will create the necessary pads,
-     * i.e one pad for audio and one for video
-     * We add a callback so that we automatically connect to the data once it's figured out*/
     g_signal_connect(head, "pad-added", G_CALLBACK(on_decode_pad_added), streamer);
-
     streamer->pipeline = pipeline;
     return LV_RESULT_OK;
 }
@@ -756,5 +831,59 @@ static GstFlowReturn on_new_sample(GstElement * sink, gpointer user_data)
 static lv_result_t gstreamer_send_state_changed(lv_gstreamer_t * streamer, lv_gstreamer_stream_state_t state)
 {
     return lv_obj_send_event((lv_obj_t *)streamer, LV_EVENT_STATE_CHANGED, &state);
+}
+static void on_qtdemux_pad_added(GstElement * qtdemux, GstPad * pad, gpointer user_data)
+{
+    LV_UNUSED(qtdemux);
+    lv_gstreamer_t * streamer = (lv_gstreamer_t *)user_data;
+    GstCaps * caps = gst_pad_get_current_caps(pad);
+    if(!caps) caps = gst_pad_query_caps(pad, NULL);
+
+    GstStructure * structure = gst_caps_get_structure(caps, 0);
+    const gchar * name = gst_structure_get_name(structure);
+    GstElement * pipeline = streamer->pipeline;
+
+    LV_LOG_TRACE("qtdemux pad discovered: %s", name);
+
+    if(g_str_has_prefix(name, "video/")) {
+        GstElement * video_q = GST_ELEMENT(g_object_get_data(G_OBJECT(pipeline), "video-queue"));
+        GstPad * sink = gst_element_get_static_pad(video_q, "sink");
+        if(gst_pad_link(pad, sink) != GST_PAD_LINK_OK)
+            LV_LOG_ERROR("Failed to link qtdemux video pad to video queue");
+        gst_object_unref(sink);
+    }
+    else if(g_str_has_prefix(name, "audio/")) {
+        GstElement * audio_q = GST_ELEMENT(g_object_get_data(G_OBJECT(pipeline), "audio-queue"));
+        GstPad * sink = gst_element_get_static_pad(audio_q, "sink");
+        if(gst_pad_link(pad, sink) != GST_PAD_LINK_OK)
+            LV_LOG_ERROR("Failed to link qtdemux audio pad to audio queue");
+        gst_object_unref(sink);
+
+        if(!streamer->audio_convert) {
+            GstElement * audio_resample;
+            GstElement * audio_sink;
+            const lv_gstreamer_pipeline_element_t elements[] = {
+                {"audioconvert",  "lv_gstreamer_audio_convert",  &streamer->audio_convert},
+                {"volume",        "lv_gstreamer_audio_volume",   &streamer->audio_volume},
+                {"audioresample", "lv_gstreamer_audio_resample", &audio_resample},
+                {"autoaudiosink", "lv_gstreamer_audio_sink",     &audio_sink},
+            };
+            const size_t element_count = sizeof(elements) / sizeof(elements[0]);
+            if(gstreamer_make_and_add_to_pipeline(streamer, elements, element_count) != LV_RESULT_OK) {
+                gst_caps_unref(caps);
+                return;
+            }
+            if(!gst_element_link_many(audio_q, streamer->audio_convert, streamer->audio_volume, audio_resample, audio_sink, NULL)) {
+                LV_LOG_ERROR("Failed to link audio chain");
+                gst_caps_unref(caps);
+                return;
+            }
+            for(size_t i = 0; i < element_count; ++i) {
+                gst_element_sync_state_with_parent(*elements[i].store);
+            }
+        }
+    }
+
+    gst_caps_unref(caps);
 }
 #endif
