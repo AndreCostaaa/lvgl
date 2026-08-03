@@ -201,6 +201,7 @@ static void lv_gltf_view_push_opengl_state(lv_opengl_state_t * state)
     GL_CALL(glGetIntegerv(GL_ARRAY_BUFFER_BINDING, (GLint *)&state->current_vbo));
     GL_CALL(glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, (GLint *)&state->current_ibo));
     GL_CALL(glGetIntegerv(GL_CURRENT_PROGRAM, (GLint *)&state->current_program));
+    GL_CALL(glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint *)&state->current_framebuffer));
 
     /* Texture state */
     GL_CALL(glGetIntegerv(GL_ACTIVE_TEXTURE, &state->active_texture));
@@ -259,6 +260,7 @@ static void lv_gltf_view_pop_opengl_state(const lv_opengl_state_t * state)
     GL_CALL(glStencilFunc(state->stencil_func, state->stencil_ref, state->stencil_value_mask));
 
     /* Restore buffer bindings */
+    GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, state->current_framebuffer));
     GL_CALL(glBindVertexArray(state->current_vao));
     GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, state->current_vbo));
     GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state->current_ibo));
@@ -605,9 +607,10 @@ static bool setup_primitive(int32_t prim_num, lv_gltf_t * viewer, lv_gltf_model_
     }
 
     const lv_gltf_view_state_t * vstate = &viewer->state;
-    if(!is_transmission_pass && vstate->render_opaque_buffer) {
+    if(uniforms->transmission_framebuffer_sampler >= 0) {
+        const bool backdrop_ready = !is_transmission_pass && vstate->render_opaque_buffer;
         GL_CALL(glActiveTexture(GL_TEXTURE0 + tex_num));
-        GL_CALL(glBindTexture(GL_TEXTURE_2D, vstate->opaque_render_state.texture));
+        GL_CALL(glBindTexture(GL_TEXTURE_2D, backdrop_ready ? vstate->opaque_render_state.texture : GL_NONE));
         GL_CALL(glUniform1i(uniforms->transmission_framebuffer_sampler, tex_num));
         GL_CALL(glUniform2i(uniforms->transmission_framebuffer_size, (int32_t)vstate->opaque_frame_buffer_width,
                             (int32_t)vstate->opaque_frame_buffer_height));
@@ -645,6 +648,11 @@ static bool setup_primitive(int32_t prim_num, lv_gltf_t * viewer, lv_gltf_model_
         GL_CALL(glActiveTexture(GL_TEXTURE0 + tex_num));
         GL_CALL(glBindTexture(GL_TEXTURE_2D, env_tex->charlie_lut));
         GL_CALL(glUniform1i(uniforms->env_charlie_lut_sampler, tex_num++));
+    }
+    if(uniforms->env_sheen_e_lut_sampler >= 0 && env_tex->charlie_lut != GL_NONE) {
+        GL_CALL(glActiveTexture(GL_TEXTURE0 + tex_num));
+        GL_CALL(glBindTexture(GL_TEXTURE_2D, env_tex->charlie_lut));
+        GL_CALL(glUniform1i(uniforms->env_sheen_e_lut_sampler, tex_num++));
     }
     return true;
 }
@@ -925,6 +933,13 @@ static void draw_lights(lv_gltf_model_data_t * modeld, GLuint program)
 lv_result_t render_primary_output(lv_gltf_t * viewer, const lv_gltf_renwin_state_t * state, int32_t texture_w,
                                   int32_t texture_h, bool prepare_bg)
 {
+    /* glGetError() reports the errors accumulated since it was last called, so the
+     * queue is drained first. Otherwise an error raised anywhere earlier would be
+     * reported as a failure of the setup below. */
+    while(glGetError() != GL_NO_ERROR) {
+        /* drain */
+    }
+
     GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, state->framebuffer));
 
     if(glGetError() != GL_NO_ERROR) {
@@ -1204,10 +1219,11 @@ static void setup_view_proj_matrix(lv_gltf_t * viewer, lv_gltf_view_desc_t * vie
 
     fastgltf::math::fvec3 rcam_dir = fastgltf::math::fvec3(0.0f, 0.0f, 1.0f);
 
+    /* Pitch turns around X, yaw turns around Y */
     fastgltf::math::fmat3x3 rotation1 =
-        fastgltf::math::asMatrix(lv_gltf_math_euler_to_quaternion(0.f, 0.f, fastgltf::math::radians(view_desc->pitch)));
+        fastgltf::math::asMatrix(lv_gltf_math_euler_to_quaternion(fastgltf::math::radians(view_desc->pitch), 0.f, 0.f));
     fastgltf::math::fmat3x3 rotation2 =
-        fastgltf::math::asMatrix(lv_gltf_math_euler_to_quaternion(fastgltf::math::radians(view_desc->yaw), 0.f, 0.f));
+        fastgltf::math::asMatrix(lv_gltf_math_euler_to_quaternion(0.f, fastgltf::math::radians(view_desc->yaw), 0.f));
 
     rcam_dir = rotation1 * rcam_dir;
     rcam_dir = rotation2 * rcam_dir;
@@ -1272,6 +1288,11 @@ static lv_result_t setup_restore_opaque_output(lv_gltf_t * viewer, const lv_gltf
                                                uint32_t texture_h, bool prepare_bg)
 {
     LV_LOG_TRACE("Color texture ID: %u, Depth texture ID: %u", renwin_state->texture, renwin_state->renderbuffer);
+
+    /* Drain errors raised earlier so that the check below only sees this setup */
+    while(glGetError() != GL_NO_ERROR) {
+        /* drain */
+    }
 
     GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, renwin_state->framebuffer));
     GL_CALL(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renwin_state->texture, 0));
@@ -1449,7 +1470,7 @@ static void lv_gltf_view_recache_all_transforms(lv_gltf_model_data_t * modeld)
 static void setup_environment_rotation_matrix(float env_rotation_angle, uint32_t shader_program)
 {
     fastgltf::math::fmat3x3 rotmat =
-        fastgltf::math::asMatrix(lv_gltf_math_euler_to_quaternion(env_rotation_angle, 0.f, 3.14159f));
+        fastgltf::math::asMatrix(lv_gltf_math_euler_to_quaternion(3.14159f, env_rotation_angle, 0.f));
 
     // Get the uniform location and set the uniform
     int32_t u_loc;

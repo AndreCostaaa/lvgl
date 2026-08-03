@@ -1,0 +1,185 @@
+{
+ "accessors": [
+  {
+   "bufferView": 0,
+   "componentType": 5126,
+   "count": 3,
+   "max": [
+    1.0,
+    1.0,
+    0.0
+   ],
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "type": "VEC3"
+  },
+  {
+   "bufferView": 1,
+   "componentType": 5126,
+   "count": 3,
+   "type": "VEC3"
+  }
+ ],
+ "asset": {
+  "generator": "lvgl gen_gltf_assets.py",
+  "version": "2.0"
+ },
+ "bufferViews": [
+  {
+   "buffer": 0,
+   "byteLength": 36,
+   "byteOffset": 0,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 36,
+   "byteOffset": 36,
+   "target": 34962
+  }
+ ],
+ "buffers": [
+  {
+   "byteLength": 72,
+   "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAPwAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/"
+  }
+ ],
+ "materials": [
+  {
+   "doubleSided": true,
+   "name": "grey",
+   "pbrMetallicRoughness": {
+    "baseColorFactor": [
+     0.6,
+     0.6,
+     0.6,
+     1.0
+    ]
+   }
+  }
+ ],
+ "meshes": [
+  {
+   "name": "tri",
+   "primitives": [
+    {
+     "attributes": {
+      "NORMAL": 1,
+      "POSITION": 0
+     },
+     "material": 0,
+     "mode": 4
+    }
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "children": [
+    1,
+    4
+   ],
+   "mesh": 0,
+   "name": "body",
+   "translation": [
+    1.0,
+    2.0,
+    3.0
+   ]
+  },
+  {
+   "children": [
+    2
+   ],
+   "mesh": 0,
+   "name": "arm",
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "translation": [
+    0.5,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "mesh": 0,
+   "name": "hand",
+   "translation": [
+    0.25,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "mesh": 0,
+   "name": "cursor",
+   "rotation": [
+    0.0,
+    0.0,
+    0.3826834,
+    0.9238795
+   ],
+   "translation": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "mesh": 0,
+   "translation": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "mesh": 0,
+   "name": "rot_x",
+   "rotation": [
+    0.258819,
+    0.0,
+    0.0,
+    0.9659258
+   ],
+   "translation": [
+    3.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "mesh": 0,
+   "name": "rot_y",
+   "rotation": [
+    0.0,
+    0.5,
+    0.0,
+    0.8660254
+   ],
+   "translation": [
+    4.0,
+    0.0,
+    0.0
+   ]
+  }
+ ],
+ "scene": 0,
+ "scenes": [
+  {
+   "name": "main",
+   "nodes": [
+    0,
+    3,
+    5,
+    6
+   ]
+  }
+ ]
+}

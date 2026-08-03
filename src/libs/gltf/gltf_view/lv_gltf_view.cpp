@@ -347,20 +347,15 @@ void lv_gltf_set_camera(lv_obj_t * obj, uint32_t value)
 {
     LV_CHECK_OBJ(obj, MY_CLASS, return);
     lv_gltf_t * viewer = (lv_gltf_t *)obj;
-
-    if(lv_array_is_empty(&viewer->models)) {
-        return;
-    }
-
+    LV_CHECK_ARG(!lv_array_is_empty(&viewer->models), return);
 
     lv_gltf_model_data_t * modeld = (lv_gltf_model_data_t *)lv_array_at(&viewer->models, 0);
     LV_ASSERT_NULL(modeld);
     lv_gltf_model_t * model = modeld->model;
     LV_ASSERT_NULL(model);
 
-    if(value > model->asset.cameras.size()) {
-        return;
-    }
+    /* Index 0 is the viewer's own camera, 1 and up are the cameras of the model */
+    LV_CHECK_ARG(value <= model->asset.cameras.size(), return);
 
     model->camera = value;
     lv_obj_invalidate(obj);
@@ -569,7 +564,16 @@ lv_result_t lv_gltf_world_to_screen(lv_obj_t * obj, const lv_3dpoint_t world_pos
     lv_gltf_t * viewer = (lv_gltf_t *)obj;
 
     fastgltf::math::fvec4 world_position_h = fastgltf::math::fvec4(world_pos.x, world_pos.y, world_pos.z, 1.0f);
-    fastgltf::math::fvec4 clip_space_pos = viewer->projection_matrix * viewer->view_matrix * world_position_h;
+    fastgltf::math::fvec4 view_space_pos = viewer->view_matrix * world_position_h;
+
+    /* pointing behind the camera*/
+    if(view_space_pos[2] >= 0.0f) {
+        screen_pos->x = -1;
+        screen_pos->y = -1;
+        return LV_RESULT_INVALID;
+    }
+
+    fastgltf::math::fvec4 clip_space_pos = viewer->projection_matrix * view_space_pos;
 
     /* Check for perspective division (w must not be zero) */
     if(clip_space_pos[3] == 0.0f) {
@@ -709,6 +713,14 @@ static void lv_gltf_destructor(const lv_obj_class_t * class_p, lv_obj_t * obj)
     const size_t n = lv_array_size(&view->models);
     for(size_t i = 0; i < n; ++i) {
         lv_gltf_model_data_t * model_data = (lv_gltf_model_data_t *)lv_array_at(&view->models, i);
+
+        /* The skin textures are recreated on every render, so the last set is still alive */
+        const size_t skin_texture_count = lv_array_size(&model_data->skin_textures);
+        for(size_t j = 0; j < skin_texture_count; ++j) {
+            GL_CALL(glDeleteTextures(1, (GLuint *)lv_array_at(&model_data->skin_textures, j)));
+        }
+        lv_array_deinit(&model_data->skin_textures);
+
         if(model_data->owned) {
             lv_gltf_model_delete(model_data->model);
         }

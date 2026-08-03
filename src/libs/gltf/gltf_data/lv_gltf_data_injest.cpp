@@ -175,8 +175,8 @@ lv_gltf_model_t * lv_gltf_data_load_internal(const void * data_source, size_t da
         model = create_data_from_file((const char *)data_source);
     }
 
-    LV_ASSERT_MSG(model, "Failed to create gltf data");
     if(!model) {
+        LV_LOG_ERROR("Failed to create glTF data");
         return NULL;
     }
 
@@ -205,6 +205,15 @@ lv_gltf_model_t * lv_gltf_data_load_internal(const void * data_source, size_t da
     /*Virtually set size so that lv_array_assign will work*/
     model->nodes.size = model->asset.nodes.size();
 
+    /* Every node gets initialized, not only the ones the scene walk below reaches:
+     * nodes that belong to another scene would otherwise stay uninitialized and be
+     * freed as garbage when the model is deleted. */
+    for(size_t node_index = 0; node_index < model->asset.nodes.size(); node_index++) {
+        lv_gltf_model_node_t model_node;
+        lv_gltf_model_node_init(model, &model_node, &model->asset.nodes[node_index], "", "");
+        lv_array_assign(&model->nodes, node_index, &model_node);
+    }
+
     fastgltf::namegen_iterate_scene_nodes(model->asset, scene_index,
                                           [&](fastgltf::Node & node, const std::string & node_path, const std::string & node_num_path,
     size_t node_index, std::size_t child_index) {
@@ -214,6 +223,7 @@ lv_gltf_model_t * lv_gltf_data_load_internal(const void * data_source, size_t da
 
         /* Store the nodes in the same order as fastgltf
          * This is a workaround as we can't assign any type of user data to fastgltf's types*/
+        lv_gltf_model_node_deinit((lv_gltf_model_node_t *)lv_array_at(&model->nodes, node_index));
         lv_array_assign(&model->nodes, node_index, & model_node);
     });
 
@@ -246,7 +256,7 @@ lv_gltf_model_t * lv_gltf_data_load_internal(const void * data_source, size_t da
     }
 
     if(model->asset.defaultScene.has_value()) {
-        LV_LOG_INFO("Default scene = #%" LV_PRIu64, model->asset.defaultScene.value());
+        LV_LOG_INFO("Default scene = #%zu", model->asset.defaultScene.value());
     }
 
     return model;
@@ -267,37 +277,50 @@ static lv_gltf_model_t * create_data_from_file(const char * path)
     res = lv_fs_seek(&file, 0, LV_FS_SEEK_END);
     if(res != LV_FS_RES_OK) {
         LV_LOG_ERROR("Failed to seek end of file '%s': %d", path, res);
+        lv_fs_close(&file);
         return NULL;
     }
     uint32_t file_size;
     res = lv_fs_tell(&file, &file_size);
     if(res != LV_FS_RES_OK) {
         LV_LOG_ERROR("Failed to get file count size '%s': %d", path, res);
+        lv_fs_close(&file);
         return NULL;
     }
 
     res = lv_fs_seek(&file, 0, LV_FS_SEEK_SET);
     if(res != LV_FS_RES_OK) {
         LV_LOG_ERROR("Failed to seek start of file '%s': %d", path, res);
+        lv_fs_close(&file);
         return NULL;
     }
 
     uint8_t * bytes = (uint8_t *) lv_malloc(file_size);
+    LV_ASSERT_MALLOC(bytes);
+    if(bytes == NULL) {
+        lv_fs_close(&file);
+        return NULL;
+    }
 
     uint32_t bytes_read;
     res = lv_fs_read(&file, bytes, file_size, &bytes_read);
+    lv_fs_close(&file);
     if(res != LV_FS_RES_OK) {
-        LV_LOG_ERROR("Failed to seek start of file '%s': %d", path, res);
+        LV_LOG_ERROR("Failed to read file '%s': %d", path, res);
+        lv_free(bytes);
         return NULL;
     }
     if(bytes_read != file_size) {
         LV_LOG_ERROR("Failed to read the entire gltf file '%s': %d", path, res);
+        lv_free(bytes);
         return NULL;
     }
-    lv_fs_close(&file);
 
     lv_gltf_model_t * model = create_data_from_bytes(bytes, file_size);
     lv_free(bytes);
+    if(model == NULL) {
+        return NULL;
+    }
 
     model->filename = path;
     return model;
@@ -580,7 +603,7 @@ static bool injest_image_from_buffer_view(lv_gltf_model_t * data, fastgltf::sour
        to just copy the buffer data again for the texture. Besides, this is just an example. */
     auto & buffer_view = data->asset.bufferViews[view.bufferViewIndex];
     auto & buffer = data->asset.buffers[buffer_view.bufferIndex];
-    LV_LOG_INFO("Unpacking image bufferView: %s from %" LV_PRIu64 " bytes", buffer_view.name.c_str(), buffer.byteLength);
+    LV_LOG_INFO("Unpacking image bufferView: %s from %zu bytes", buffer_view.name.c_str(), buffer.byteLength);
     return std::visit(
     fastgltf::visitor{
         // We only care about VectorWithMime here, because we specify LoadExternalBuffers, meaning
@@ -660,7 +683,7 @@ static void injest_light(lv_gltf_model_t * data, size_t light_index, fastgltf::L
            node.lightIndex.value() != light_index) {
             return;
         }
-        LV_LOG_INFO("SCENE LIGHT BEING ADDED #%" LV_PRIu64 "\n", light_index);
+        LV_LOG_INFO("SCENE LIGHT BEING ADDED #%zu\n", light_index);
         data->node_by_light_index.push_back(&node);
     });
 }

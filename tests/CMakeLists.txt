@@ -199,6 +199,20 @@ if(CONFIG_LV_USE_DRAW_VG_LITE AND NON_AMD64_BUILD)
     target_compile_definitions(lvgl PUBLIC REF_IMG_TOLERANCE=9)
 endif()
 
+# The glTF sources include fastgltf, whose util.hpp tests _MSC_VER and
+# __clang_major__ in #if without defining them first. Building with GCC, where
+# neither is defined, that trips -Wundef. Not something LVGL can fix, so -Wundef
+# is relaxed for these files only.
+if(CONFIG_LV_USE_GLTF AND IS_GNU_LIKE)
+    file(GLOB_RECURSE LVGL_GLTF_SOURCES
+        ${LVGL_ROOT_DIR}/src/libs/gltf/*.c
+        ${LVGL_ROOT_DIR}/src/libs/gltf/*.cpp)
+    # lvgl is created in the LVGL root scope, not here, so the property has to be
+    # set on that target's directory.
+    set_source_files_properties(${LVGL_GLTF_SOURCES} TARGET_DIRECTORY lvgl
+        PROPERTIES COMPILE_OPTIONS "-Wno-undef")
+endif()
+
 ############################# BUILD TESTS #############################
 
 set(TEST_INCLUDE_DIRS

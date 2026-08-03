@@ -1,0 +1,222 @@
+{
+ "accessors": [
+  {
+   "bufferView": 0,
+   "componentType": 5126,
+   "count": 6,
+   "max": [
+    0.25,
+    1.0,
+    0.0
+   ],
+   "min": [
+    -0.25,
+    0.0,
+    0.0
+   ],
+   "type": "VEC3"
+  },
+  {
+   "bufferView": 1,
+   "componentType": 5126,
+   "count": 6,
+   "type": "VEC3"
+  },
+  {
+   "bufferView": 2,
+   "componentType": 5123,
+   "count": 6,
+   "type": "VEC4"
+  },
+  {
+   "bufferView": 3,
+   "componentType": 5126,
+   "count": 6,
+   "type": "VEC4"
+  },
+  {
+   "bufferView": 4,
+   "componentType": 5123,
+   "count": 12,
+   "type": "SCALAR"
+  },
+  {
+   "bufferView": 5,
+   "componentType": 5126,
+   "count": 2,
+   "type": "MAT4"
+  },
+  {
+   "bufferView": 6,
+   "componentType": 5126,
+   "count": 2,
+   "max": [
+    1.0
+   ],
+   "min": [
+    0.0
+   ],
+   "type": "SCALAR"
+  },
+  {
+   "bufferView": 7,
+   "componentType": 5126,
+   "count": 2,
+   "type": "VEC4"
+  }
+ ],
+ "animations": [
+  {
+   "channels": [
+    {
+     "sampler": 0,
+     "target": {
+      "node": 2,
+      "path": "rotation"
+     }
+    }
+   ],
+   "name": "bend",
+   "samplers": [
+    {
+     "input": 6,
+     "interpolation": "LINEAR",
+     "output": 7
+    }
+   ]
+  }
+ ],
+ "asset": {
+  "generator": "lvgl gen_gltf_assets.py",
+  "version": "2.0"
+ },
+ "bufferViews": [
+  {
+   "buffer": 0,
+   "byteLength": 72,
+   "byteOffset": 0,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 72,
+   "byteOffset": 72,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 48,
+   "byteOffset": 144,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 96,
+   "byteOffset": 192,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 24,
+   "byteOffset": 288,
+   "target": 34963
+  },
+  {
+   "buffer": 0,
+   "byteLength": 128,
+   "byteOffset": 312,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 8,
+   "byteOffset": 440,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteLength": 32,
+   "byteOffset": 448,
+   "target": 34962
+  }
+ ],
+ "buffers": [
+  {
+   "byteLength": 480,
+   "uri": "data:application/octet-stream;base64,AACAvgAAAAAAAAAAAACAPgAAAAAAAAAAAACAvgAAAD8AAAAAAACAPgAAAD8AAAAAAACAvgAAgD8AAAAAAACAPgAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAA/AAAAPwAAAAAAAAAAAAAAPwAAAD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAABAAIAAQADAAIAAgADAAQAAwAFAAQAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAC/AAAAAAAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAABTvwz5eg2w/"
+  }
+ ],
+ "materials": [
+  {
+   "doubleSided": true,
+   "name": "skin",
+   "pbrMetallicRoughness": {
+    "baseColorFactor": [
+     0.9,
+     0.7,
+     0.5,
+     1.0
+    ]
+   }
+  }
+ ],
+ "meshes": [
+  {
+   "name": "strip",
+   "primitives": [
+    {
+     "attributes": {
+      "JOINTS_0": 2,
+      "NORMAL": 1,
+      "POSITION": 0,
+      "WEIGHTS_0": 3
+     },
+     "indices": 4,
+     "material": 0,
+     "mode": 4
+    }
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "mesh": 0,
+   "name": "skinned",
+   "skin": 0
+  },
+  {
+   "children": [
+    2
+   ],
+   "name": "root_joint"
+  },
+  {
+   "name": "tip_joint",
+   "translation": [
+    0.0,
+    0.5,
+    0.0
+   ]
+  }
+ ],
+ "scene": 0,
+ "scenes": [
+  {
+   "nodes": [
+    0,
+    1
+   ]
+  }
+ ],
+ "skins": [
+  {
+   "inverseBindMatrices": 5,
+   "joints": [
+    1,
+    2
+   ],
+   "name": "skeleton",
+   "skeleton": 1
+  }
+ ]
+}

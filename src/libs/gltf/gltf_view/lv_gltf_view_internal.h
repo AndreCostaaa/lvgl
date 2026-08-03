@@ -129,6 +129,7 @@ typedef struct {
     GLuint current_vbo;
     GLuint current_ibo;
     GLuint current_program;
+    GLuint current_framebuffer;
 
     /* Texture state */
     GLint active_texture;

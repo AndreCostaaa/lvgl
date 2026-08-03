@@ -2134,6 +2134,10 @@
 /** Render into an off-screen EGL pbuffer instead of a window and read the
  *  pixels back into the LVGL draw buffer, so screenshot compares work the
  *  same way as with the software renderer. Requires EGL and GLESv2.
+ *
+ *  LV_USE_EGL is required: the headless display takes the GL entry points
+ *  from LVGL's glad loader, so that NanoVG, the OpenGL ES driver and glTF
+ *  all call through the same one.
  */
 #define LV_USE_NANOVG_TEST_HEADLESS 0
 

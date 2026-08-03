@@ -90,7 +90,7 @@ test_options = {
         "defconfigs": ["full", "depth_32", HOST, "sys_heap", "run_tests", "riscv_v"],
     },
     "OPTIONS_TEST_NANOVG": {
-        "description": "NanoVG headless rendering with EGL, 32 bit color depth",
+        "description": "NanoVG headless rendering with EGL and glTF, 32 bit color depth",
         "defconfigs": ["full", "depth_32", HOST, "sys_heap", "run_tests", "nanovg"],
     },
 }
