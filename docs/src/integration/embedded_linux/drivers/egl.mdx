@@ -39,6 +39,108 @@ This API is currently private and experimental, and people should expect breakin
 This allows you to use EGL with your own context management or other platforms, but the API may change
 without notice in future versions.
 
+## Off-Screen Rendering Without a Display Server
+
+<Callout type="warn">
+This feature is experimental. Expect breaking changes.
+</Callout>
+
+<ApiLink name="lv_opengles_pbuffer_create" /> creates a display that renders on the GPU with no window
+system at all, and reads the finished frame back into the display's draw buffer. It creates its own EGL
+context on an off-screen surface, so it needs neither a display server nor an existing OpenGL context.
+
+### When This Is the Right Tool
+
+The pbuffer display earns its place when you need the **GPU renderer's** output on a machine with no
+display. Concretely:
+
+- **Rendering 3D content headless.** The software renderer cannot draw glTF at all, since
+  `LV_DRAW_HAS_3D_SUPPORT` comes from the GL renderers. Generating a thumbnail of a
+  [glTF](/libs/gltf) model on a server, or regression-testing 3D content in CI, has no
+  software-rendered equivalent.
+- **Screenshot testing a GPU-rendered UI.** If your product renders with NanoVG, software-rendered
+  screenshots will not match what the device produces. LVGL's own test suite uses this display for
+  exactly that reason.
+- **Batch or server-side image generation** — report pages, print previews, thumbnails — where you want
+  GPU rendering but there is no screen.
+
+### When to Use Something Else
+
+- **You already have an OpenGL context** (embedding LVGL in a game or other GL application): use
+  <ApiLink name="lv_opengles_texture_create" /> instead. It hands you a texture ID with no readback and
+  no context creation. See [OpenGL Driver](/integration/embedded_linux/drivers/opengl_driver).
+- **You only need headless *software* rendering:** you need none of this. The software renderer is
+  already headless — just give a display a buffer and never present it.
+- **An interactive or high-frame-rate output path:** reading pixels back synchronizes with the GPU every
+  frame, which throttles throughput. This is a capture path, not a display path.
+
+### Configuration
+
+Requires EGL, the OpenGL ES driver, and the NanoVG draw unit:
+
+```c
+#define LV_USE_EGL          1   /* compiler define or lv_conf.h; not selectable in menuconfig */
+#define LV_USE_OPENGLES     1
+#define LV_USE_DRAW_NANOVG  1
+```
+
+### Basic Usage
+
+```c
+#include "lvgl/lvgl.h"
+
+#define WIDTH  800
+#define HEIGHT 480
+
+int main(void)
+{
+    lv_init();
+    /* Don't forget the tick callback */
+
+    lv_display_t * disp = lv_opengles_pbuffer_create(WIDTH, HEIGHT);
+    if(disp == NULL) return 1;
+
+    /* An OpenGL ES 3 context is requested first, falling back to ES 2. glTF needs ES 3. */
+    if(lv_opengles_pbuffer_get_gles_version(disp) < 3) {
+        LV_LOG_WARN("No OpenGL ES 3 context, 3D content is unavailable");
+    }
+
+    lv_demo_widgets();
+
+    /* Render one frame. The flush reads the GPU result into the display's draw buffer. */
+    lv_timer_handler();
+
+    /* The rendered pixels, as XRGB8888 */
+    lv_draw_buf_t * frame = lv_display_get_buf_active(disp);
+    /* ... encode `frame`, hand it to a video pipeline, compare it against a reference ... */
+
+    /* Take the handle before lv_deinit(), then release the GL context afterwards.
+     * Draw units still issue GL calls while they are being destroyed, and lv_deinit()
+     * deletes displays before draw units. */
+    lv_opengles_pbuffer_t * pbuffer = lv_opengles_pbuffer_get_handle(disp);
+    lv_deinit();
+    lv_opengles_pbuffer_destroy(pbuffer);
+
+    return 0;
+}
+```
+
+Use <ApiLink name="lv_opengles_pbuffer_read_to_draw_buf" /> if you want an additional copy of the frame
+in a draw buffer of your own rather than reading the display's.
+
+### Known Limitations
+
+- Only the NanoVG draw unit is supported. It renders through the bound GL framebuffer, which is what the
+  readback expects. <ApiLink name="LV_USE_DRAW_OPENGLES" /> renders into the display's own texture, which
+  would additionally have to be composited before the readback; that path is not implemented.
+- The resolution and color format are fixed when the display is created. Changing either afterwards is
+  not supported.
+- No hardware multisampling. The color attachment is single-sampled, so antialiasing comes from NanoVG's
+  own geometry AA. Rendering into a multisampled off-screen surface instead is not portable — Mesa rejects
+  reading pixels back from one.
+- Requires an EGL platform that offers off-screen configs, such as `EGL_MESA_platform_surfaceless`. The
+  driver falls back to the default EGL display if that platform is unavailable.
+
 ## Improving Performance
 
 There is a renderer in LVGL which caches software-rendered areas as OpenGL textures.

@@ -97,6 +97,7 @@
 #include "drivers/nuttx/lv_nuttx_touchscreen.h"
 #include "drivers/opengles/lv_opengles_driver.h"
 #include "drivers/opengles/lv_opengles_glfw.h"
+#include "drivers/opengles/lv_opengles_pbuffer.h"
 #include "drivers/opengles/lv_opengles_texture.h"
 #include "drivers/opengles/lv_opengles_window.h"
 #include "drivers/qnx/lv_qnx.h"
