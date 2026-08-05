@@ -1,13 +1,13 @@
 {
   "title": "Drivers",
   "pages": [
-    "fbdev",
     "drm",
-    "opengl_driver",
-    "glfw",
-    "egl",
+    "fbdev",
     "wayland",
     "X11",
+    "glfw",
+    "opengl_driver",
+    "egl",
     "evdev",
     "libinput"
   ]

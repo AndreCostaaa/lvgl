@@ -1,76 +1,123 @@
 ---
 title: Linux Framebuffer
-description: "The Linux framebuffer (fbdev) is a linux subsystem used to display graphics. It is a hardware-independent API that gives user space software access to the framebuffer (the part of a computer's vide..."
+description: "The Linux framebuffer (fbdev) driver renders LVGL into /dev/fb through the kernel's framebuffer interface, with no libraries and no display server required."
 ---
 
 ## Overview
 
-The Linux framebuffer (fbdev) is a linux subsystem used to display graphics. It is a hardware-independent API that gives user space software
-access to the framebuffer (the part of a computer's video memory containing a current video frame) using only the Linux kernel's own basic
-facilities and its device file system interface, avoiding the need for libraries that implement video drivers in user space.
+The Linux framebuffer (fbdev) is a kernel subsystem that exposes a video framebuffer to user space through a
+device file, typically `/dev/fb0`. It is hardware-independent and needs no user-space graphics libraries at
+all, which makes this the simplest way to put LVGL on a screen: open the device, write pixels.
 
-## Prerequisites
+That simplicity is also its limit. fbdev has no modesetting, no GPU path and no page-flip guarantees. It is
+the right choice for minimal systems and for kernels that expose nothing else; on anything modern prefer
+[DRM/KMS](/integration/embedded_linux/drivers/drm), which supersedes fbdev and can reach the GPU.
 
-Your system has a framebuffer device configured (usually under `/dev/fb0`).
+### Prerequisites
 
-## Configuring the driver
+A framebuffer device, usually `/dev/fb0`, and permission to open it.
 
-Enable the framebuffer driver support in lv_conf.h, by cmake compiler define or by KConfig. Additionally you may configure the rendering
-mode.
+## Configuration
 
-```c
-#define LV_USE_LINUX_FBDEV           1
-#define LV_LINUX_FBDEV_RENDER_MODE   LV_DISPLAY_RENDER_MODE_PARTIAL
-```
+Enable <ApiLink name="LV_USE_LINUX_FBDEV" />.
+
+There are no libraries to resolve or link — the driver talks to the kernel through `ioctl` and `mmap`
+directly.
+
+### Options
+
+| Symbol | Default | Effect |
+|---|---|---|
+| `LV_LINUX_FBDEV_RENDER_MODE` | `LV_DISPLAY_RENDER_MODE_PARTIAL` | Render mode; see below. |
+| `LV_LINUX_FBDEV_BUFFER_COUNT` | `1` | `1` or `2` screen-sized buffers, or `0` for a custom-sized partial buffer. |
+| `LV_LINUX_FBDEV_BUFFER_SIZE` | `60` | Height in rows of the partial buffer. Only used when the buffer count is `0`. |
+| `LV_LINUX_FBDEV_MMAP` | on | Access the framebuffer via `mmap()` instead of `write()` calls. |
+| `LV_LINUX_FBDEV_BSD` | off | Use the BSD flavour of the framebuffer device. |
+
+`LV_LINUX_FBDEV_RENDER_MODE` accepts <ApiLink name="LV_DISPLAY_RENDER_MODE_PARTIAL" />,
+<ApiLink name="LV_DISPLAY_RENDER_MODE_DIRECT" /> or <ApiLink name="LV_DISPLAY_RENDER_MODE_FULL" />.
+
+The buffer count and the render mode constrain each other: two screen-sized buffers require a non-partial
+render mode, and a custom-sized buffer requires the partial one.
 
 ## Usage
 
-To set up a framebuffer-based display, first create a display with <ApiLink name="lv_linux_fbdev_create" />. Afterwards set the framebuffer device
-node on the display with <ApiLink name="lv_linux_fbdev_set_file" /> (usually this is `/dev/fb0`).
+Create the display with <ApiLink name="lv_linux_fbdev_create" />, then point it at a device node with
+<ApiLink name="lv_linux_fbdev_set_file" />.
 
 ```c
-lv_display_t *disp = lv_linux_fbdev_create();
+lv_display_t * disp = lv_linux_fbdev_create();
 lv_linux_fbdev_set_file(disp, "/dev/fb0");
 ```
 
-If your screen stays black or only draws partially, you can try enabling direct
-rendering via <ApiLink name="LV_DISPLAY_RENDER_MODE_DIRECT" />. Additionally, you can
-activate a force refresh mode with <ApiLink name="lv_linux_fbdev_set_force_refresh" />. This
-usually has a performance impact though and shouldn't be enabled unless really needed.
+The resolution and color format come from the device — the driver reads them from the framebuffer's
+`ioctl` info, so there is nothing to configure.
 
-## Hide the cursor
-
-You may encounter a blinking cursor on the screen. The method to hide it
-varies depending on the platform. For instance, here is how it can be done
-on a Raspberry Pi:
-
-1. Edit `/boot/cmdline.txt` file.
-2. Add `vt.global_cursor_default=0`.
-
-## Common mistakes
-
-### Default resolution issue
-
-When the Linux kernel initializes, it sets up subsystems like the framebuffer
-(fbdev) to manage display output. If an HDMI display is connected, the kernel
-detects it and allocates a portion of RAM as the framebuffer, which holds the
-pixel data for rendering images.
-
-However, a common issue arises when the display is not powered on during the
-boot process. If the board is powered on before the screen, the kernel may
-incorrectly configure the framebuffer resolution. As a result, both the visible
-and virtual resolutions can be incorrect, leading to display problems.
-
-This issue often occurs with HDMI connections where the display is powered up
-after the system has already booted.
-
-The following command outputs the current settings of the specified framebuffer
-device, such as resolution, pixel depth, and timings.
+fbdev has no input support. Pair it with [evdev](/integration/embedded_linux/drivers/evdev) or
+[libinput](/integration/embedded_linux/drivers/libinput):
 
 ```c
+lv_indev_t * touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, "/dev/input/event0");
+lv_indev_set_display(touch, disp);
+```
+
+[lv_port_linux](https://github.com/lvgl/lv_port_linux) has a working build for this driver, along with all
+the others.
+
+### Rotation costs you direct rendering
+
+<Callout type="warning" title="Direct mode only applies at rotation 0">
+The driver takes the direct-rendering fast path only when the display rotation is
+<ApiLink name="LV_DISPLAY_ROTATION_0" />. Rotating the display silently falls back to rotating each frame
+into a separate buffer, even with `LV_LINUX_FBDEV_RENDER_MODE` set to
+<ApiLink name="LV_DISPLAY_RENDER_MODE_DIRECT" />. If you need both rotation and direct rendering, rotate the
+panel in the device tree or use [DRM](/integration/embedded_linux/drivers/drm) with its EGL backend, where
+the GPU rotates for free.
+</Callout>
+
+### If the screen stays black or draws partially
+
+Try <ApiLink name="LV_DISPLAY_RENDER_MODE_DIRECT" /> first. If that does not help, force a refresh of the
+whole screen on every flush with <ApiLink name="lv_linux_fbdev_set_force_refresh" />. This costs performance,
+so only enable it when it is genuinely needed.
+
+### Hide the blinking cursor
+
+The kernel console leaves a blinking cursor on the framebuffer. How to disable it depends on the platform;
+on a Raspberry Pi, add `vt.global_cursor_default=0` to `/boot/cmdline.txt`.
+
+### Wrong resolution after boot
+
+The kernel sizes the framebuffer when it initializes, based on what the display reports. If the board powers
+up before the screen — common with HDMI — the kernel may pick the wrong resolution, leaving both the visible
+and virtual resolutions incorrect.
+
+Check what the kernel actually chose:
+
+```sh
 fbset -fb /dev/fb0
 ```
 
-To prevent display-related issues, it is recommended to ensure all devices,
-including the HDMI display, are connected and powered on before powering up
-the board.
+The fix is procedural: make sure the display is connected and powered before the board boots.
+
+## Support
+
+| Capability | Value |
+|---|---|
+| Rotation | Software — but it disables the direct-mode fast path |
+| Runtime resolution change | No — fixed at initialization from the device |
+| Runtime color format change | No — fixed at initialization from the device |
+| Color formats | RGB565, RGB888 or XRGB8888, chosen from the framebuffer's bit depth (16, 24 or 32) |
+| Multiple displays / windows | Yes — one display per framebuffer device |
+| Hardware acceleration | None |
+| Render mode | Partial (default) — configurable via `LV_LINUX_FBDEV_RENDER_MODE` |
+| Input | None built in — pair with [evdev](/integration/embedded_linux/drivers/evdev) or [libinput](/integration/embedded_linux/drivers/libinput) |
+
+A framebuffer bit depth other than 16, 24 or 32 is rejected at initialization.
+
+## See Also
+
+- [DRM](/integration/embedded_linux/drivers/drm) - the modern replacement, with modesetting and a GPU path
+- [evdev](/integration/embedded_linux/drivers/evdev) - simplest input pairing for this driver
+- [libinput](/integration/embedded_linux/drivers/libinput) - input with device quirks and full keyboard support
+- [lv_port_linux](https://github.com/lvgl/lv_port_linux) - reference project

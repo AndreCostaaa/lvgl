@@ -1,42 +1,47 @@
 ---
 title: SDL Draw Unit
-description: "The SDL Draw Unit provides a hardware-accelerated rendering backend for LVGL that leverages SDL2's texture system. It uses software rendering to create SDL textures which are then cached and effici..."
+description: "The SDL draw unit renders widgets in software, caches them as SDL textures, and lets SDL's renderer composite them on the GPU."
 ---
 
 ## Overview
 
-The SDL Draw Unit provides a hardware-accelerated rendering backend for LVGL that leverages SDL2's texture system.
-It uses software rendering to create SDL textures which are then cached and efficiently blended together by the GPU to compose the final UI.
-This approach combines the flexibility of software rendering with the performance benefits of hardware-accelerated texture blending.
+The SDL draw unit renders widgets in software, caches the result as an SDL texture, and lets SDL's own
+renderer blend those textures into the final frame. It is a hybrid: software rasterization,
+hardware compositing.
 
-### Key Features
+It is the natural choice when your application already uses SDL and you want cheap acceleration without
+introducing an OpenGL dependency. It works best with static or slowly-changing UIs, where most textures are
+reused between frames, and offers little for content that changes every frame.
 
-- **Texture Caching**: Rendered elements are cached as SDL textures, reducing redundant rendering operations
-- **Hardware Blending**: SDL's GPU-accelerated texture blending provides smooth compositing
-- **Cross-Platform**: Works on any platform that supports SDL2
-- **Easy Integration**: Seamless integration with SDL-based LVGL applications
-
-### Performance Characteristics
-
-The SDL Draw Unit excels in scenarios with:
-
-- **Best Performance**: Static or infrequently changing UI elements that benefit from texture caching
-- **Good Performance**: UIs with moderate animation and updates
-- **Consider Alternatives**: Heavily dynamic content that changes every frame may not benefit as much from caching
-
-## Prerequisites
-
-- SDL2 library installed (see [SDL Driver](/integration/pc/sdl) for installation instructions)
-- LVGL configured with SDL support (`LV_USE_SDL 1`)
+For genuinely GPU-accelerated rendering, use [NanoVG](/integration/embedded_linux/draw_units/draw_nanovg)
+through the SDL driver's EGL backend instead — it rasterizes on the GPU rather than only compositing there.
 
 ## Configuration
 
-Enable the SDL draw unit in `lv_conf.h`:
+Enable <ApiLink name="LV_USE_DRAW_SDL" /> alongside <ApiLink name="LV_USE_SDL" />. It has no options of its
+own.
 
-```c
-#define LV_USE_SDL 1
-#define LV_USE_DRAW_SDL 1
-#define LV_USE_DRAW_SW 1
-```
+Selecting `LV_SDL_BACKEND_TEXTURE` in the SDL driver enables this draw unit for you, so on Kconfig-configured
+builds picking the backend is enough. Rasterization still happens in software, so keep the software renderer
+(<ApiLink name="LV_USE_DRAW_SW" />, on by default) enabled.
 
-The SDL Draw Unit automatically integrates with the SDL display driver when both are enabled.
+Enabling <ApiLink name="LV_USE_DRAW_SDL" /> is also what pulls `SDL2_image` into the build. Unlike most Linux
+display dependencies it **can** be fetched and built from source by LVGL if it is not installed. See
+[Dependency Management](/integration/building/cmake).
+
+## Support
+
+The draw unit and the SDL driver's texture backend are two halves of the same thing, and the backend fixes the
+render mode to full — there is no knob to turn.
+
+<Callout type="info" title="LV_SDL_RENDER_MODE does not apply here">
+`LV_SDL_RENDER_MODE` is honoured only by the SDL driver's *software* backend. The texture and EGL backends
+override it, so setting it has no effect once this draw unit is in use.
+</Callout>
+
+## See Also
+
+- [SDL Driver](/integration/pc/sdl) - the display driver this draw unit pairs with
+- [NanoVG Draw Unit](/integration/embedded_linux/draw_units/draw_nanovg) - true GPU rasterization, via SDL's EGL backend
+- [OpenGL Overview](/integration/embedded_linux/opengl) - how drivers and draw units fit together
+- [Dependency Management](/integration/building/cmake) - how LVGL resolves or fetches SDL2_image

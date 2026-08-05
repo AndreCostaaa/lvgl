@@ -1,60 +1,115 @@
 ---
 title: OpenGL Overview
-description: "OpenGL (Open Graphics Library) is a cross-platform, hardware-accelerated graphics API that provides a standardized interface for rendering 2D and 3D graphics. Originally developed by Silicon Graphi..."
+description: "How LVGL's OpenGL support fits together on Linux: which display drivers create a context, which draw units render on the GPU, and how the two combine."
 ---
 
-## Introduction
+## Overview
 
-### Overview
+OpenGL is a cross-platform, hardware-accelerated graphics API, and OpenGL ES is the subset designed for
+embedded and mobile hardware. LVGL uses it on Linux for three reasons: to offload rendering to the GPU, to
+embed LVGL content inside existing OpenGL applications, and to render 3D content, which the software renderer
+cannot do at all.
 
-OpenGL (Open Graphics Library) is a cross-platform, hardware-accelerated graphics API that provides a standardized interface for rendering 2D and 3D graphics.
-Originally developed by Silicon Graphics in 1992, OpenGL has become one of the most widely adopted graphics APIs across desktop, mobile, and embedded platforms.
+LVGL's OpenGL support comes in two halves, and you generally need one of each:
 
-### OpenGL Support in LVGL
+- **Display drivers** create and own the OpenGL context, and put the finished frame on screen.
+- **Draw units** do the actual rendering with OpenGL instead of the CPU.
 
-The OpenGL integration consists of two main components:
+Enabling a driver with an OpenGL backend but no GPU draw unit is valid and sometimes what you want — LVGL then
+renders in software and uses OpenGL only to present the result.
 
-- OpenGL Display Drivers: Handle output by showing the LVGL rendered content on the display, window, or texture in OpenGL-based environments
-- OpenGL Draw Units: When enabled, LVGL uses OpenGL for hardware-accelerated rendering operations.
+## Drivers That Create a Context
 
-OpenGL support addresses several key use cases:
+These drivers create and manage an OpenGL context for you:
 
-1. Performance optimization: Leverage GPU acceleration for rendering.
-2. Cross-Platform compatibility: OpenGL's wide platform support enables LVGL UIs on desktop, mobile, and embedded systems.
-3. Integration with existing applications: Embed LVGL UI elements into games, visualization tools, or other OpenGL applications.
+| Driver | How to get the OpenGL path |
+|---|---|
+| [DRM](/integration/embedded_linux/drivers/drm) | `LV_LINUX_DRM_BACKEND_EGL` |
+| [Wayland](/integration/embedded_linux/drivers/wayland) | `LV_WAYLAND_BACKEND_EGL` |
+| [SDL](/integration/pc/sdl) | `LV_SDL_BACKEND_EGL` |
+| [GLFW](/integration/embedded_linux/drivers/glfw) | Always — <ApiLink name="LV_USE_GLFW" /> implies OpenGL |
 
-## OpenGL Driver Options
+Every one of them except GLFW uses [EGL](/integration/embedded_linux/drivers/egl) underneath.
 
-The following drivers can be used and will automatically create and maintain an OpenGL context.
+<Callout type="warning" title="GLFW and EGL are mutually exclusive">
+<ApiLink name="LV_USE_GLFW" /> cannot be combined with <ApiLink name="LV_USE_EGL" /> — each wants to own
+context creation. Pick one.
+</Callout>
 
-- [SDL driver](/integration/pc/sdl)
-- [Wayland driver](/integration/embedded_linux/drivers/wayland)
-- [DRM driver](/integration/embedded_linux/drivers/drm)
-- [GLFW driver](/integration/embedded_linux/drivers/glfw)
+Two drivers do not create a context and expect one to exist:
 
-All drivers except the GLFW driver use EGL (Embedded-System Graphics Library) under the hood.
+- [OpenGL Driver](/integration/embedded_linux/drivers/opengl_driver) renders into a texture, for embedding
+  LVGL in an application that already owns the context.
+- The [EGL pbuffer display](/integration/embedded_linux/drivers/egl) renders off-screen with no window system
+  at all, for headless GPU rendering.
 
-Additionally, LVGL provides a generic OpenGL driver which the user may use to embed
-OpenGL textures in existing OpenGL applications. This driver assumes an existing OpenGL context
-and generates textures with hardware acceleration for integration into custom graphics pipelines.
+## Draw Units
 
-For complete implementation details, see [OpenGL driver](/integration/embedded_linux/drivers/opengl_driver).
+| Draw unit | Notes |
+|---|---|
+| [NanoVG](/integration/embedded_linux/draw_units/draw_nanovg) | **Recommended.** Rasterizes on the GPU, best performance, widest feature coverage, and the only draw unit supporting off-screen rendering. |
+| [OpenGL ES](/integration/embedded_linux/draw_units/draw_opengl) | Caches software-rendered areas as GPU textures. Slower, fewer features. |
+| [SDL](/integration/embedded_linux/draw_units/draw_sdl) | Software rasterization with SDL texture compositing. Not an OpenGL draw unit, listed for comparison. |
 
-## OpenGL Draw Unit Options
+## Render Mode: Fixed or Configurable
 
-When one of these draw units is enabled as well as one of the supporting drivers, LVGL will use OpenGL for
-hardware-accelerated rendering.
+Render mode and buffering are usually **not** yours to choose. The rule is simple:
 
-- [NanoVG](/integration/embedded_linux/draw_units/draw_nanovg)
-- [OpenGL](/integration/embedded_linux/draw_units/draw_opengl)
+> The render mode is fixed wherever a GPU or a compositor owns the buffers, and configurable only in the
+> CPU-blit drivers.
 
-[NanoVG](/integration/embedded_linux/draw_units/draw_nanovg) is the recommended choice. It makes better use of the GPU
-and supports more LVGL features. OpenGL is also available but the performance is worse and it supports fewer features.
+That is why every OpenGL path below is fixed. LVGL picks the mode that suits the backend rather than offering
+a menu.
 
-## 3D/glTF Support
+### Fixed by the driver
 
-The glTF module provides support for loading and rendering 3D models using the glTF 2.0 specification within LVGL applications.
-This support requires OpenGL ES 2.0 with some extra extensions and provides comprehensive 3D rendering capabilities including PBR materials,
-animations, and interactive camera controls for embedded 3D visualization.
+| Driver / backend | Render mode |
+|---|---|
+| Wayland SHM | Direct |
+| Wayland G2D | Direct |
+| Wayland EGL | Full with NanoVG, otherwise Direct |
+| DRM dumb buffers / GBM | Direct |
+| DRM EGL | Full with NanoVG, otherwise Direct |
+| SDL texture | Full |
+| SDL EGL | Full with NanoVG, otherwise Direct |
+| GLFW window display | Full with <ApiLink name="LV_USE_DRAW_OPENGLES" />, otherwise Direct |
+| OpenGL texture | Direct |
+| EGL pbuffer | Full |
 
-For complete implementation details, see [glTF](/libs/gltf).
+Note the pattern in the EGL rows: enabling NanoVG changes the render mode the driver selects. That is
+expected — NanoVG renders the whole frame on the GPU each time, so partial and direct modes have nothing to
+contribute.
+
+### Configurable
+
+| Driver | Render mode | Buffering |
+|---|---|---|
+| [fbdev](/integration/embedded_linux/drivers/fbdev) | `LV_LINUX_FBDEV_RENDER_MODE` | `LV_LINUX_FBDEV_BUFFER_COUNT` |
+| [X11](/integration/embedded_linux/drivers/X11) | `LV_X11_RENDER_MODE` | `LV_X11_DOUBLE_BUFFER` |
+| [SDL](/integration/pc/sdl) — software backend only | `LV_SDL_RENDER_MODE` | `LV_SDL_BUF_COUNT` |
+
+<Callout type="info" title="The SDL asymmetry">
+`LV_SDL_RENDER_MODE` is honoured only by the SDL driver's software backend. The texture and EGL backends
+override it, so it has no effect there.
+</Callout>
+
+## 3D and glTF
+
+The glTF module loads and renders 3D models per the glTF 2.0 specification, with PBR materials, animations and
+camera control. It needs OpenGL ES 2.0 with some extra extensions.
+
+3D support comes from the GL renderers — the software renderer cannot draw glTF at all — so a GPU draw unit is
+not optional here. That also makes headless 3D rendering a case for the
+[EGL pbuffer display](/integration/embedded_linux/drivers/egl), which is the only way to produce GPU-rendered
+frames on a machine with no display.
+
+For details, see [glTF](/libs/gltf).
+
+## See Also
+
+- [NanoVG Draw Unit](/integration/embedded_linux/draw_units/draw_nanovg) - the recommended GPU renderer
+- [EGL](/integration/embedded_linux/drivers/egl) - the layer under most OpenGL paths on Linux
+- [DRM](/integration/embedded_linux/drivers/drm) - production driver with an EGL backend
+- [GLFW](/integration/embedded_linux/drivers/glfw) - quickest OpenGL setup for development
+- [OpenGL Driver](/integration/embedded_linux/drivers/opengl_driver) - embedding LVGL in an existing context
+- [glTF](/libs/gltf) - 3D model rendering
