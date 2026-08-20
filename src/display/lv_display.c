@@ -1563,6 +1563,7 @@ static void update_resolution(lv_display_t * disp)
 
 static lv_obj_tree_walk_res_t invalidate_layout_cb(lv_obj_t * obj, void * user_data)
 {
+    LV_ASSERT(obj != NULL);
     LV_UNUSED(user_data);
     LV_ASSERT(obj != NULL);
     lv_obj_mark_layout_as_dirty(obj);
@@ -1571,6 +1572,7 @@ static lv_obj_tree_walk_res_t invalidate_layout_cb(lv_obj_t * obj, void * user_d
 
 static void screen_event_delete_cb(lv_event_t * e)
 {
+    LV_ASSERT(e != NULL);
     lv_obj_t ** screen_var = lv_event_get_user_data(e);
     *screen_var = NULL;
 }
@@ -1597,7 +1599,7 @@ static lv_load_screen_result_t load_new_screen(lv_obj_t * scr)
     LV_ASSERT_NULL(scr);
 
     lv_display_t * d = lv_obj_get_display(scr);
-    LV_ASSERT_NULL(d);
+    LV_ASSERT(d != NULL);
 
     lv_obj_t * old_scr = d->act_scr;
     /* Attach an event delete cb to the screen so we know if the screen is deleted during an event*/
