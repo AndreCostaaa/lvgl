@@ -104,6 +104,16 @@ bool lv_area_is_out(const lv_area_t * aout_p, const lv_area_t * aholder_p, int32
  */
 bool lv_area_is_equal(const lv_area_t * a, const lv_area_t * b);
 
+static inline void lv_area_copy_internal(lv_area_t * dest, const lv_area_t * src)
+{
+    LV_ASSERT(dest != NULL);
+    LV_ASSERT(src != NULL);
+    dest->x1 = src->x1;
+    dest->y1 = src->y1;
+    dest->x2 = src->x2;
+    dest->y2 = src->y2;
+}
+
 /**********************
  *      MACROS
  **********************/
