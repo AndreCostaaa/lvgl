@@ -88,6 +88,13 @@ void lv_area_increase(lv_area_t * area, int32_t w_extra, int32_t h_extra)
     area->y2 += h_extra;
 }
 
+void lv_area_copy(lv_area_t * dest, const lv_area_t * src)
+{
+    LV_CHECK_ARG(dest != NULL, return);
+    LV_CHECK_ARG(src != NULL, return);
+    lv_area_copy_internal(dest, src);
+}
+
 void lv_area_move(lv_area_t * area, int32_t x_ofs, int32_t y_ofs)
 {
     LV_CHECK_ARG(area != NULL, return);
