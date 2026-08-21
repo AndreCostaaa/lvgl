@@ -11,8 +11,9 @@
 
 #if LV_USE_GRID
 
-#include "../../core/lv_obj_private.h"
 #include "../../core/lv_global.h"
+#include "../../core/lv_obj_private.h"
+#include "../../misc/lv_area_private.h"
 #include "../../core/lv_obj_style_internal.h"
 
 /*********************
@@ -627,7 +628,7 @@ static void item_repos(lv_obj_t * item, lv_grid_calc_t * c, item_repos_hint_t * 
     /*Set a new size if required*/
     if(lv_obj_get_width(item) != item_w || lv_obj_get_height(item) != item_h) {
         lv_area_t old_coords;
-        lv_area_copy(&old_coords, &item->coords);
+        lv_area_copy_internal(&old_coords, &item->coords);
         lv_obj_invalidate(item);
         lv_area_set_width(&item->coords, item_w);
         lv_area_set_height(&item->coords, item_h);

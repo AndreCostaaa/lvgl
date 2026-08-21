@@ -14,6 +14,7 @@
 #include "../../core/lv_obj_class_private.h"
 #include "../../lvgl_public.h"
 #include "../../misc/lv_anim_private.h"
+#include "../../misc/lv_area_private.h"
 #include "../../misc/lv_text_private.h"
 #include "../../core/lv_obj_style_internal.h"
 
@@ -964,7 +965,7 @@ static void cursor_blink_anim_cb(void * obj, int32_t show)
     if(show != ta->cursor.show) {
         ta->cursor.show = show ? 1U : 0U;
         lv_area_t area_tmp;
-        lv_area_copy(&area_tmp, &ta->cursor.area);
+        lv_area_copy_internal(&area_tmp, &ta->cursor.area);
         area_tmp.x1 += ta->label->coords.x1;
         area_tmp.y1 += ta->label->coords.y1;
         area_tmp.x2 += ta->label->coords.x1;
@@ -1146,16 +1147,16 @@ static void refr_cursor_area(lv_obj_t * obj)
 
     /*Save the new area*/
     lv_area_t area_tmp;
-    lv_area_copy(&area_tmp, &ta->cursor.area);
+    lv_area_copy_internal(&area_tmp, &ta->cursor.area);
     area_tmp.x1 += ta->label->coords.x1;
     area_tmp.y1 += ta->label->coords.y1;
     area_tmp.x2 += ta->label->coords.x1;
     area_tmp.y2 += ta->label->coords.y1;
     lv_obj_invalidate_area(obj, &area_tmp);
 
-    lv_area_copy(&ta->cursor.area, &cur_area);
+    lv_area_copy_internal(&ta->cursor.area, &cur_area);
 
-    lv_area_copy(&area_tmp, &ta->cursor.area);
+    lv_area_copy_internal(&area_tmp, &ta->cursor.area);
     area_tmp.x1 += ta->label->coords.x1;
     area_tmp.y1 += ta->label->coords.y1;
     area_tmp.x2 += ta->label->coords.x1;
@@ -1322,7 +1323,7 @@ static void draw_placeholder(lv_event_t * e)
         int32_t top = lv_obj_get_style_pad_top_internal(label, LV_PART_TEXTAREA_PLACEHOLDER);
         lv_area_t ph_coords;
 
-        lv_area_copy(&ph_coords, &label->coords);
+        lv_area_copy_internal(&ph_coords, &label->coords);
         lv_area_move(&ph_coords, left, top);
         ph_dsc.text = ta->placeholder_txt;
         ph_dsc.text_size = ta->placeholder_txt_size;
@@ -1346,7 +1347,7 @@ static void draw_cursor(lv_event_t * e)
 
     /*Draw he cursor according to the type*/
     lv_area_t cur_area;
-    lv_area_copy(&cur_area, &ta->cursor.area);
+    lv_area_copy_internal(&cur_area, &ta->cursor.area);
 
     cur_area.x1 += ta->label->coords.x1;
     cur_area.y1 += ta->label->coords.y1;

@@ -569,12 +569,10 @@ void lv_image_buf_free(lv_image_dsc_t * dsc)
     LV_LOG_DEPRECATED("Use lv_draw_buf_destroy instead.");
     if(dsc == NULL) return;
 
-    if(dsc != NULL) {
-        if(dsc->data != NULL)
-            lv_free((void *)dsc->data);
+    if(dsc->data != NULL)
+        lv_free((void *)dsc->data);
 
-        lv_free((void *)dsc);
-    }
+    lv_free((void *)dsc);
 }
 
 /**********************

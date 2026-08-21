@@ -123,7 +123,7 @@ void lv_draw_nema_gfx_label(lv_draw_task_t * t, const lv_draw_label_dsc_t * dsc,
     lv_layer_t * layer = t->target_layer;
 
     lv_area_t clip_area;
-    lv_area_copy(&clip_area, &t->clip_area);
+    lv_area_copy_internal(&clip_area, &t->clip_area);
     lv_area_move(&clip_area, -layer->buf_area.x1, -layer->buf_area.y1);
 
     lv_color_format_t dst_cf = layer->draw_buf->header.cf;
@@ -343,7 +343,7 @@ static void _draw_nema_gfx_letter(lv_draw_task_t * t, lv_draw_glyph_dsc_t * glyp
             lv_area_t mask_area = *glyph_draw_dsc->letter_coords;
 
             lv_area_t rel_coords;
-            lv_area_copy(&rel_coords, &blend_area);
+            lv_area_copy_internal(&rel_coords, &blend_area);
             lv_area_move(&rel_coords, -layer->buf_area.x1, -layer->buf_area.y1);
 
             int32_t x, y, w, h;

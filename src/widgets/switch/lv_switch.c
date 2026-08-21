@@ -13,6 +13,7 @@
 #if LV_USE_SWITCH
 
 #include "../../misc/lv_anim_private.h"
+#include "../../misc/lv_area_private.h"
 #include "../../core/lv_obj_style_internal_gen.h"
 
 /*********************
@@ -206,7 +207,7 @@ static void draw_main(lv_event_t * e)
 
     /*Draw the knob*/
     lv_area_t knob_area;
-    lv_area_copy(&knob_area, &obj->coords);
+    lv_area_copy_internal(&knob_area, &obj->coords);
 
     int32_t switch_w = lv_area_get_width(&obj->coords);
     int32_t switch_h = lv_area_get_height(&obj->coords);

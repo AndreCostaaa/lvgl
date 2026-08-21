@@ -15,6 +15,7 @@
 #include "../../core/lv_obj_class_private.h"
 #include "../../misc/lv_text_private.h"
 #include "../../misc/lv_text_ap.h"
+#include "../../misc/lv_area_private.h"
 #include "../../core/lv_obj_style_internal_gen.h"
 
 /*********************
@@ -281,7 +282,7 @@ static void lv_checkbox_draw(lv_event_t * e)
     marker_area.y2 = marker_area.y1 + font_h + marker_topp + marker_bottomp - 1;
 
     lv_area_t marker_area_transf;
-    lv_area_copy(&marker_area_transf, &marker_area);
+    lv_area_copy_internal(&marker_area_transf, &marker_area);
     lv_area_increase(&marker_area_transf, transf_w, transf_h);
 
     lv_draw_rect(layer, &indic_dsc, &marker_area_transf);
