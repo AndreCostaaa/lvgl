@@ -217,14 +217,7 @@ void lv_vector_path_append_rectangle(lv_vector_path_t * path, float x, float y, 
  * @param rx                the horizontal radius for rounded rectangle
  * @param ry                the vertical radius for rounded rectangle
  */
-static inline void lv_vector_path_append_rect(lv_vector_path_t * path, const lv_area_t * rect, float rx, float ry)
-{
-    LV_ASSERT_NULL(path);
-    LV_ASSERT_NULL(rect);
-
-    lv_vector_path_append_rectangle(path, rect->x1, rect->y1, (float)lv_area_get_width(rect),
-                                    (float)lv_area_get_height(rect), rx, ry);
-}
+void lv_vector_path_append_rect(lv_vector_path_t * path, const lv_area_t * rect, float rx, float ry);
 
 /**
  * Add a circle to the path
