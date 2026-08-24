@@ -124,7 +124,7 @@ void lv_theme_delete(lv_theme_t * theme);
  * the associated resources.
  *
  * @param theme      Pointer to theme which callback should be set
- * @param user_data  User-defined data pointer to associate with the theme
+ * @param user_data  User-defined data pointer to associate with the theme @nullable
  * @param free_cb    Callback function for cleaning up ext_data when theme is deleted.
  *                   Receives user_data as parameter. @nullable. NULL means no cleanup required.
  */
