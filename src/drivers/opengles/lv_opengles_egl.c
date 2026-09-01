@@ -43,6 +43,7 @@ static lv_result_t lv_egl_config_from_egl_config(lv_opengles_egl_t * ctx, lv_egl
 static void * create_native_window(lv_opengles_egl_t * ctx);
 static lv_result_t get_native_config(lv_opengles_egl_t * ctx, EGLint * native_id, uint64_t ** mods, size_t * count);
 static GLADapiproc glad_egl_load_cb(void * userdata, const char * name);
+static bool egl_config_cf_matches(const lv_egl_config_t * config, lv_color_format_t cf);
 
 /**********************
 *  STATIC VARIABLES
@@ -145,39 +146,39 @@ void lv_opengles_egl_update(lv_opengles_egl_t * ctx)
 size_t lv_opengles_egl_display_select_config(lv_display_t * display, const lv_egl_config_t * configs,
                                              size_t config_count)
 {
-    int32_t target_w = lv_display_get_horizontal_resolution(display);
-    int32_t target_h = lv_display_get_vertical_resolution(display);
+    LV_ASSERT(display != NULL);
+    LV_ASSERT(configs != NULL);
 
-#if LV_COLOR_DEPTH == 16
-    lv_color_format_t target_cf = LV_COLOR_FORMAT_RGB565;
-#elif LV_COLOR_DEPTH == 32
-    lv_color_format_t target_cf = LV_COLOR_FORMAT_ARGB8888;
-#else
-#error("Unsupported color format")
-#endif
-
+    const int32_t target_w = lv_display_get_horizontal_resolution(display);
+    const int32_t target_h = lv_display_get_vertical_resolution(display);
+    const lv_color_format_t target_cf = lv_display_get_color_format(display);
 
     for(size_t i = 0; i < config_count; ++i) {
-        LV_LOG_TRACE("Got config %zu %#x %dx%d %d %d %d %d buffer size %d depth %d  samples %d stencil %d surface type %d",
+        LV_LOG_TRACE("Got config %zu %#x %dx%d %d %d %d %d buffer size %d depth %d samples %d stencil %d surface type %d renderable type %d",
                      i, configs[i].id,
-                     configs[i].max_width, configs[i].max_height, configs[i].r_bits, configs[i].g_bits, configs[i].b_bits, configs[i].a_bits,
-                     configs[i].buffer_size, configs[i].depth, configs[i].samples, configs[i].stencil, configs[i].surface_type);
+                     configs[i].max_width, configs[i].max_height,
+                     configs[i].r_bits, configs[i].g_bits, configs[i].b_bits, configs[i].a_bits,
+                     configs[i].buffer_size, configs[i].depth, configs[i].samples, configs[i].stencil,
+                     configs[i].surface_type & EGL_WINDOW_BIT, configs[i].renderable_type & EGL_OPENGL_ES2_BIT);
     }
 
     for(size_t i = 0; i < config_count; ++i) {
-        lv_color_format_t config_cf = lv_opengles_egl_color_format_from_egl_config(&configs[i]);
-        const bool resolution_matches = configs[i].max_width >= target_w &&
-                                        configs[i].max_height >= target_h;
-        const bool is_nanovg_compatible = (configs[i].renderable_type & EGL_OPENGL_ES2_BIT) != 0 &&
-                                          configs[i].stencil == 8 && configs[i].samples == 4;
-        const bool is_window = (configs[i].surface_type & EGL_WINDOW_BIT) != 0;
+        const lv_egl_config_t * config = &configs[i];
+        const bool resolution_matches = config->max_width >= target_w && config->max_height >= target_h;
+        const bool is_nanovg_compatible = (config->renderable_type & EGL_OPENGL_ES2_BIT) != 0 &&
+                                          config->stencil == 8 && config->samples == 4;
+        const bool is_window = (config->surface_type & EGL_WINDOW_BIT) != 0;
         const bool is_compatible_with_draw_unit = is_nanovg_compatible || !LV_USE_DRAW_NANOVG;
 
-        if(is_window && resolution_matches && config_cf == target_cf && is_compatible_with_draw_unit) {
-            LV_LOG_TRACE("Choosing config %zu", i);
+        if(is_window && resolution_matches && is_compatible_with_draw_unit &&
+           egl_config_cf_matches(config, target_cf)) {
+            LV_LOG_INFO("Choosing EGL config %zu (id %#x) for color format %d", i, config->id, target_cf);
             return i;
         }
     }
+
+    LV_LOG_WARN("No EGL config matches %" LV_PRId32 "x%" LV_PRId32 " in color format %d",
+                target_w, target_h, target_cf);
     return config_count;
 }
 
@@ -559,6 +560,52 @@ lv_color_format_t lv_opengles_egl_color_format_from_egl_config(const lv_egl_conf
     LV_LOG_INFO("Unhandled color format (RGBA) (%d %d %d %d)", config->r_bits, config->g_bits, config->b_bits,
                 config->a_bits);
     return LV_COLOR_FORMAT_UNKNOWN;
+}
+
+/**
+ * Tell whether an EGL config can back a surface of an LVGL color format.
+ * Formats which only differ in the use of their padding/alpha bits share the same EGL config.
+ */
+static bool egl_config_cf_matches(const lv_egl_config_t * config, lv_color_format_t cf)
+{
+    const lv_color_format_t config_cf = lv_opengles_egl_color_format_from_egl_config(config);
+
+    if(config_cf == cf) {
+        return true;
+    }
+
+    switch(cf) {
+        case LV_COLOR_FORMAT_ARGB8888_PREMULTIPLIED:
+            return config_cf == LV_COLOR_FORMAT_ARGB8888;
+        case LV_COLOR_FORMAT_XRGB8888:
+        case LV_COLOR_FORMAT_RGB888:
+            return config_cf == LV_COLOR_FORMAT_ARGB8888 || config_cf == LV_COLOR_FORMAT_RGB888;
+        default:
+            return false;
+    }
+}
+
+lv_color_format_t lv_opengles_egl_display_ensure_color_format(lv_display_t * display)
+{
+    LV_ASSERT(display != NULL);
+
+    const lv_color_format_t cf = lv_display_get_color_format(display);
+    lv_opengles_gl_format_t gl_format;
+
+    /*An EGL window surface always has a red, a green and a blue channel*/
+    if(cf != LV_COLOR_FORMAT_L8 && lv_opengles_gl_format_from_color_format(cf, &gl_format) == LV_RESULT_OK) {
+        return cf;
+    }
+
+    LV_LOG_WARN("Color format %d can't back an EGL surface. Falling back to ARGB8888", cf);
+    lv_display_set_color_format(display, LV_COLOR_FORMAT_ARGB8888);
+    return LV_COLOR_FORMAT_ARGB8888;
+}
+
+size_t lv_opengles_egl_select_config_for_display(lv_display_t * display, const lv_egl_config_t * configs,
+                                                 size_t config_count)
+{
+
 }
 
 static lv_result_t lv_egl_config_from_egl_config(lv_opengles_egl_t * ctx, lv_egl_config_t * lv_egl_config,

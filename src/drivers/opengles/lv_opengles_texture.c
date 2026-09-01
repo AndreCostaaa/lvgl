@@ -34,7 +34,7 @@
 static lv_display_t * lv_opengles_texture_create_common(int32_t w, int32_t h);
 static lv_result_t lv_opengles_texture_create_draw_buffers(lv_opengles_texture_t * texture, lv_display_t * display);
 static void lv_opengles_texture_attach_to_display(lv_opengles_texture_t * texture, lv_display_t * disp);
-static unsigned int create_texture(int32_t w, int32_t h);
+static unsigned int create_texture(int32_t w, int32_t h, lv_color_format_t cf);
 static void flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map);
 static void release_disp_cb(lv_event_t * e);
 static inline unsigned int lv_opengles_texture_get_texture_id_internal(lv_display_t * disp);
@@ -59,7 +59,12 @@ lv_display_t * lv_opengles_texture_create(int32_t w, int32_t h)
         return NULL;
     }
     lv_opengles_texture_t * texture = lv_display_get_driver_data(display);
-    unsigned int texture_id = create_texture(w, h);
+    unsigned int texture_id = create_texture(w, h, lv_display_get_color_format(display));
+    if(texture_id == GL_NONE) {
+        LV_LOG_ERROR("Failed to create texture");
+        lv_display_delete(display);
+        return NULL;
+    }
     texture->texture_id = texture_id;
     texture->is_texture_owner = true;
     /* Attach the texture to the display after the texture id has been set*/
@@ -87,7 +92,7 @@ lv_result_t lv_opengles_texture_reshape(lv_opengles_texture_t * texture, lv_disp
 {
     LV_ASSERT(display != NULL);
     LV_ASSERT(texture != NULL);
-    unsigned int new_texture = create_texture(width, height);
+    unsigned int new_texture = create_texture(width, height, lv_display_get_color_format(display));
     if(new_texture == GL_NONE) {
         LV_LOG_ERROR("Failed to reshape texture. Couldn't acquire new texture from GPU");
         return LV_RESULT_INVALID;
@@ -213,7 +218,7 @@ static lv_display_t * lv_opengles_texture_create_common(int32_t w, int32_t h)
     return disp;
 }
 
-static unsigned int create_texture(int32_t w, int32_t h)
+static unsigned int create_texture(int32_t w, int32_t h, lv_color_format_t cf)
 {
     unsigned int texture;
     GL_CALL(glGenTextures(1, &texture));
@@ -222,18 +227,13 @@ static unsigned int create_texture(int32_t w, int32_t h)
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    GL_CALL(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
 
     /* set the dimensions and format to complete the texture */
-    /* Color depth: 16 (RGB565), 32 (XRGB8888) */
-#if LV_COLOR_DEPTH == 16
-    GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-                         NULL));
-#elif LV_COLOR_DEPTH == 32
-    GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
-#else
-#error("Unsupported color format")
-#endif
+    if(lv_opengles_texture_upload_buf(texture, NULL, w, h, lv_draw_buf_width_to_stride(w, cf),
+                                      cf) != LV_RESULT_OK) {
+        GL_CALL(glDeleteTextures(1, &texture));
+        return GL_NONE;
+    }
 
 #if 0
     GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
@@ -261,23 +261,7 @@ static void flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * px_m
     if(lv_display_flush_is_last(disp)) {
 
         lv_opengles_texture_t * texture = lv_display_get_driver_data(disp);
-        lv_color_format_t cf = lv_display_get_color_format(disp);
-        uint32_t stride = lv_draw_buf_width_to_stride(lv_display_get_horizontal_resolution(disp), cf);
-
-        GL_CALL(glBindTexture(GL_TEXTURE_2D, texture->texture_id));
-
-        GL_CALL(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
-        GL_CALL(glPixelStorei(GL_UNPACK_ROW_LENGTH, stride / lv_color_format_get_size(cf)));
-        /*Color depth: 16 (RGB565), 32 (XRGB8888)*/
-#if LV_COLOR_DEPTH == 16
-        GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB565, disp->hor_res, disp->ver_res, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-                             texture->fb1));
-#elif LV_COLOR_DEPTH == 32
-        GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, disp->hor_res, disp->ver_res, 0, GL_BGRA, GL_UNSIGNED_BYTE,
-                             texture->fb1));
-#else
-#error("Unsupported color format")
-#endif
+        lv_opengles_texture_upload_display_buf(texture->texture_id, disp, texture->fb1);
     }
 #endif /* !LV_USE_DRAW_OPENGLES */
 

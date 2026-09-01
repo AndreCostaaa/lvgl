@@ -21,7 +21,6 @@
 #include <time.h>
 #include <unistd.h>
 #include "lv_linux_drm_egl_private.h"
-#include "../../opengles/lv_opengles_debug.h"
 #include "../../opengles/lv_opengles_private.h"
 
 /**********************
@@ -111,6 +110,10 @@ lv_result_t lv_linux_drm_set_file(lv_display_t * disp, const char * file, int64_
     }
 
     lv_display_set_resolution(disp, ctx->drm_mode->hdisplay, ctx->drm_mode->vdisplay);
+
+    /* The EGL config is picked for this color format, so settle it before
+     * creating the context and the draw buffers */
+    lv_opengles_egl_display_ensure_color_format(disp);
 
     ctx->egl_interface = drm_get_egl_interface(ctx);
     ctx->egl_ctx = lv_opengles_egl_context_create(&ctx->egl_interface);
@@ -227,32 +230,17 @@ static void flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * px_m
     LV_UNUSED(area);
     if(lv_display_flush_is_last(disp)) {
         lv_drm_ctx_t * ctx = lv_display_get_driver_data(disp);
-        int32_t disp_width = lv_display_get_horizontal_resolution(disp);
-        int32_t disp_height = lv_display_get_vertical_resolution(disp);
 
         set_viewport(disp);
 
-        lv_color_format_t cf = lv_display_get_color_format(disp);
-        uint32_t stride = lv_draw_buf_width_to_stride(lv_display_get_horizontal_resolution(disp), cf);
-        GL_CALL(glBindTexture(GL_TEXTURE_2D, ctx->texture.texture_id));
-
-        GL_CALL(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
-        GL_CALL(glPixelStorei(GL_UNPACK_ROW_LENGTH, stride / lv_color_format_get_size(cf)));
-        /*Color depth: 16 (RGB565), 32 (ARGB8888)*/
-#if LV_COLOR_DEPTH == 16
-        GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB565, disp_width, disp_height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-                             ctx->texture.fb1));
-#elif LV_COLOR_DEPTH == 32
-        GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, disp_width, disp_height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                             ctx->texture.fb1));
-#else
-#error("Unsupported color format")
-#endif
+        const lv_color_format_t cf = lv_display_get_color_format(disp);
+        lv_opengles_texture_upload_display_buf(ctx->texture.texture_id, disp, ctx->texture.fb1);
 
         lv_opengles_render_params_t params = {
             .h_flip = false,
             .v_flip = false,
-            .rb_swap = LV_COLOR_DEPTH == 32,
+            .rb_swap = lv_opengles_color_format_rb_swap(cf),
+            .cf = cf,
         };
         lv_opengles_render_display(disp, &params);
         lv_opengles_egl_update(ctx->egl_ctx);

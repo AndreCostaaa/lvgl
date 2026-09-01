@@ -45,6 +45,15 @@ lv_color_format_t lv_opengles_egl_color_format_from_egl_config(const lv_egl_conf
  */
 uint8_t lv_opengles_egl_get_gles_version(lv_opengles_egl_t * ctx);
 
+/**
+ * Make sure a display uses a color format the EGL backends can create a surface for.
+ * Falls back to `LV_COLOR_FORMAT_ARGB8888` and logs a warning if it doesn't.
+ * Has to be called before the draw buffers of the display are allocated.
+ * @param display   the display to check
+ * @return          the color format the display uses after the call
+ */
+lv_color_format_t lv_opengles_egl_display_ensure_color_format(lv_display_t * display);
+
 void lv_opengles_egl_update(lv_opengles_egl_t * ctx);
 void lv_opengles_egl_clear(lv_opengles_egl_t * ctx);
 void lv_opengles_egl_context_destroy(lv_opengles_egl_t * ctx);
