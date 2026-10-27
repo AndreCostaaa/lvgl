@@ -82,6 +82,8 @@ void * lv_draw_create_unit(size_t size)
     lv_draw_unit_t * new_unit = lv_malloc_zeroed(size);
     LV_ASSERT_MALLOC(new_unit);
     new_unit->next = _draw_info.unit_head;
+    /*The new unit becomes the default, and falls back to the previous default*/
+    new_unit->fallback = _draw_info.unit_head;
 
     _draw_info.unit_head = new_unit;
     _draw_info.unit_cnt++;

@@ -220,6 +220,8 @@ void lv_init(void)
 
     lv_draw_init();
 
+    /*Create the draw units from the lowest to the highest priority:
+     *each one falls back to the one created before it and the last one is the default*/
 #if LV_USE_DRAW_SW
     lv_draw_sw_init();
 #endif
