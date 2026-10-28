@@ -70,6 +70,8 @@ static int32_t nema_gfx_dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
 
 static int32_t nema_gfx_evaluate(lv_draw_unit_t * draw_unit, lv_draw_task_t * task);
 
+static void nema_gfx_sync(lv_draw_unit_t * draw_unit);
+
 static int32_t nema_gfx_delete(lv_draw_unit_t * draw_unit);
 
 static int32_t nema_gfx_wait_for_finish(lv_draw_unit_t * draw_unit);
@@ -123,6 +125,7 @@ void lv_draw_nema_gfx_init(void)
     draw_nema_gfx_unit->base_unit.wait_for_finish_cb = nema_gfx_wait_for_finish;
     draw_nema_gfx_unit->base_unit.name = "NEMA_GFX";
     draw_nema_gfx_unit->base_unit.draw_cbs = &draw_cbs;
+    draw_nema_gfx_unit->base_unit.sync_cb = nema_gfx_sync;
 
 #if LV_USE_NEMA_VG
     /*Initialize NemaVG */
@@ -295,6 +298,12 @@ static int32_t nema_gfx_evaluate(lv_draw_unit_t * draw_unit, lv_draw_task_t * ta
     }
     nema_cl_wait(&(draw_nema_gfx_unit->cl));
     return 0;
+}
+
+static void nema_gfx_sync(lv_draw_unit_t * draw_unit)
+{
+    lv_draw_nema_gfx_unit_t * draw_nema_gfx_unit = (lv_draw_nema_gfx_unit_t *)draw_unit;
+    nema_cl_wait(&(draw_nema_gfx_unit->cl));
 }
 
 static int32_t nema_gfx_dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
